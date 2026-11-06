@@ -60,7 +60,7 @@ def build(
     spec: MultiSpec,
     workspace: Workspace,
     output_path: str,
-    output_format: OutputFormat = "fmlt",
+    output_format: OutputFormat = "ksp6",
 ) -> BuildResult:
     template_path = workspace.input_path(spec.template.source_path)
     template = load_template(spec, template_path)
@@ -74,6 +74,10 @@ def build(
             details={"validation": report.to_dict()},
         )
 
+    if output_format not in ("fmlt", "ksp6"):
+        raise Sp6Error(INVALID_SPEC, f"Unknown output format {output_format}", "output_format")
+    if Path(output_path).suffix.lower() != f".{output_format}":
+        raise Sp6Error(INVALID_SPEC, f"output_path must end with .{output_format} for this format", "output_path")
     target = workspace.output_path(output_path, protect=(template_path,))
     new_payload = mc.apply(template.payload, spec.name, _zone_changes(spec))
     target_id = spec.preferred_user_multi_id
@@ -92,8 +96,8 @@ def build(
         multi_record = Record("multi", target_id, new_payload, 0, 0)
         data = single_object_export(multi_record, programs, target_id)
         included_programs = [p.object_id for p in programs]
-    else:  # pragma: no cover - guarded by the MCP/CLI schema
-        raise Sp6Error(INVALID_SPEC, f"Unknown output format {output_format}", "output_format")
+    else:  # pragma: no cover - checked above
+        raise AssertionError(output_format)
 
     verification = verify_artifact(container, spec.template.id, data, target_id, output_format)
 
@@ -115,7 +119,16 @@ def build(
         "changes": verification["field_changes"],
         "preserved": verification["preserved"],
         "dependencies": report.dependencies,
-        "warnings": [i.to_dict() for i in report.issues if i.severity == "warning"],
+        "warnings": [i.to_dict() for i in report.issues if i.severity == "warning"] + (
+            [{
+                "severity": "warning",
+                "code": "PARTIAL_EXPORT",
+                "field": "output_format",
+                "message": "Editor .fmlt exports also carry each Program's FX and algorithm records; this file "
+                "contains only the Multi and Program records. Prefer output_format 'ksp6' until the editor "
+                "has been shown to accept this file.",
+            }] if output_format == "fmlt" else []
+        ),
         "effective_zones": report.effective_zones,
         "not_adjusted": "Velocity, volume, pan, controllers (ModWheel/FILTER1), Arp button, pedals, wheels "
         "and FX keep the template's values; this codec cannot write them yet.",

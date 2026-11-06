@@ -19,9 +19,9 @@ def test_cli_flow(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["objects"][0]["id"] == 1025
     assert main(["validate", str(tmp_path / "sheet.json")]) == 0
     capsys.readouterr()
-    assert main(["build", str(tmp_path / "sheet.json"), "cli.fmlt"]) == 0
+    assert main(["build", str(tmp_path / "sheet.json"), "cli.ksp6"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["target_multi_id"] == 1027
-    assert (tmp_path / "artifacts" / "cli.fmlt").is_file()
+    assert (tmp_path / "artifacts" / "cli.ksp6").is_file()
     assert main(["read", "bank.ksp6", "9"]) == 1
     assert json.loads(capsys.readouterr().out)["error"]["code"] == "INVALID_SPEC"

@@ -38,7 +38,7 @@ def sheet(ws, **over):
 
 def test_build_fmlt(ws):
     before = (ws.work_root / "private" / "bank.ksp6").read_bytes()
-    r = build(sheet(ws), ws, "standup.fmlt")
+    r = build(sheet(ws), ws, "standup.fmlt", "fmlt")
     assert (ws.work_root / "private" / "bank.ksp6").read_bytes() == before  # source untouched
     c = Container(r.output_path.read_bytes())
     assert [(x.kind, x.object_id) for x in c.records][0] == ("multi", 1026)
@@ -61,19 +61,20 @@ def test_build_ksp6_preserves_everything_else(ws):
 
 
 def test_build_is_deterministic(ws):
-    a = build(sheet(ws), ws, "a.fmlt").output_path.read_bytes()
-    b = build(sheet(ws), ws, "b.fmlt").output_path.read_bytes()
+    a = build(sheet(ws), ws, "a.fmlt", "fmlt").output_path.read_bytes()
+    b = build(sheet(ws), ws, "b.fmlt", "fmlt").output_path.read_bytes()
+    assert build(sheet(ws), ws, "a.ksp6").output_path.read_bytes() == build(sheet(ws), ws, "b.ksp6").output_path.read_bytes()
     assert a == b
 
 
 def test_diff_with_source_multi(ws):
-    r = build(sheet(ws), ws, "x.fmlt")
+    r = build(sheet(ws), ws, "x.fmlt", "fmlt")
     d = diff_files(ws.work_root / "private" / "bank.ksp6", r.output_path, source_multi_id=1)
     z = {e["zone"]: e["fields"] for e in d["multi_field_diffs"][0]["zones"]}
     assert z[2]["transpose_semitones"] == {"from": 0, "to": -24}
 
 
-@pytest.mark.parametrize("path", ["../escape.fmlt", "C:/abs.fmlt", "/abs.fmlt", ""])
+@pytest.mark.parametrize("path", ["../escape.ksp6", "C:/abs.ksp6", "/abs.ksp6", "C:rel.ksp6", "a/../../x.ksp6"])
 def test_output_path_denied(ws, path):
     with pytest.raises(Sp6Error) as e:
         build(sheet(ws), ws, path)
@@ -81,15 +82,15 @@ def test_output_path_denied(ws, path):
 
 
 def test_existing_output_denied(ws):
-    build(sheet(ws), ws, "same.fmlt")
+    build(sheet(ws), ws, "same.ksp6")
     with pytest.raises(Sp6Error) as e:
-        build(sheet(ws), ws, "same.fmlt")
+        build(sheet(ws), ws, "same.ksp6")
     assert e.value.code == "OUTPUT_PATH_DENIED"
 
 
 def test_occupied_target_refused(ws):
     with pytest.raises(Sp6Error) as e:
-        build(sheet(ws, preferred_user_multi_id=1025), ws, "o.fmlt")
+        build(sheet(ws, preferred_user_multi_id=1025), ws, "o.ksp6")
     assert e.value.code == "SLOT_OCCUPIED"
 
 
@@ -98,11 +99,22 @@ def test_unsupported_field_refused(ws):
     d = s.model_dump(mode="json", exclude_unset=True)
     d["zones"][1]["volume"] = 105
     with pytest.raises(Sp6Error) as e:
-        build(parse_spec(d), ws, "u.fmlt")
+        build(parse_spec(d), ws, "u.ksp6")
     assert e.value.code == "UNSUPPORTED_FIELD"
-    assert not (ws.artifacts_dir / "u.fmlt").exists()
+    assert not (ws.artifacts_dir / "u.ksp6").exists()
 
 
 def test_ksp6_needs_existing_empty_record(ws):
     with pytest.raises(Sp6Error):
         build(sheet(ws, preferred_user_multi_id=1500), ws, "k.ksp6", "ksp6")
+
+
+def test_extension_must_match_format(ws):
+    with pytest.raises(Sp6Error) as e:
+        build(sheet(ws), ws, "wrong.fmlt")  # default format is ksp6
+    assert e.value.field == "output_path"
+
+
+def test_fmlt_is_flagged_partial(ws):
+    r = build(sheet(ws), ws, "p.fmlt", "fmlt")
+    assert any(w["code"] == "PARTIAL_EXPORT" for w in r.report["warnings"])

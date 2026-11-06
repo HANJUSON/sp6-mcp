@@ -1,4 +1,4 @@
-# 사용법 (v0.6.0)
+# 사용법 (v0.6.1)
 
 > 비공식 도구다. 이 서버는 MIDI 포트를 열지 않고 건반에 아무것도 보내지 않는다. 생성 파일을 건반에 저장하는 일은 사용자가 SP6 Sound Editor로 직접 한다.
 
@@ -61,7 +61,7 @@ Claude Desktop (`claude_desktop_config.json`):
 | `sp6_object_find` | 이름으로 Program/Multi 번호 찾기 (예: "Prophet Pad" → 87) | 없음 |
 | `sp6_multi_read` | Multi의 Zone별 켜짐·Channel·Program(이름)·범위·Transpose·Volume·Pan | 없음 |
 | `sp6_multi_validate` | 설정표 검증: 오류·경고와 필드 경로, 실제 소리 나는 음역 | 없음 |
-| `sp6_multi_build` | artifacts 폴더에 새 `.fmlt`(기본) 또는 `.ksp6`와 `.manifest.json` 생성 | 새 로컬 파일 |
+| `sp6_multi_build` | artifacts 폴더에 새 `.ksp6`(기본: 템플릿 Bank 사본 + 빈 레코드 하나에 새 Multi) 또는 부분 형식 `.fmlt`와 `.manifest.json` 생성. 확장자는 형식과 같아야 한다 | 새 로컬 파일 |
 | `sp6_artifact_diff` | 템플릿과 생성 파일의 레코드·필드 차이 | 없음 |
 
 성공 결과는 `status`, `operation_id`, `phase`, `warnings`, `evidence`, `result`를 가진다. 실패는 MCP 도구 오류이며 본문은 `{"status":"error","error":{code,message,field,retryable,device_write_state}}` JSON이다.
@@ -73,13 +73,13 @@ Claude Desktop (`claude_desktop_config.json`):
 3. 템플릿 Multi를 고르고 `sp6_multi_read`로 Zone 상태를 확인한다. 공장 Multi를 템플릿으로 쓰면 기존 사용자 Multi를 건드릴 일이 없다.
 4. 설정표를 만든다([examples/standup.sheet.example.json](../examples/standup.sheet.example.json)). 바꾸지 않을 필드는 **생략**한다. 생략한 필드는 템플릿 값을 유지한다.
 5. `sp6_multi_validate` → `can_build: true`인지 본다. `unsupported_fields`에 나온 필드는 빼야 한다.
-6. `sp6_multi_build` → `.fmlt` 생성. 결과의 `effective_zones`, `changes`, `not_adjusted`를 사용자에게 쉬운 말로 설명한다.
+6. `sp6_multi_build` → `.ksp6` 생성(`preferred_user_multi_id` 레코드가 템플릿 파일에서 비어 있어야 한다). 결과의 `effective_zones`, `changes`, `not_adjusted`를 사용자에게 쉬운 말로 설명한다.
 
 ## 건반에 넣기 (수동, 아직 자동화하지 않음)
 
 1. SP6 Sound Editor에서 건반에 연결하고 **MIDI → Receive Data → Multi**로 User Multi를 먼저 받는다. 받기 전에는 Write 창이 모든 슬롯을 비어 있는 것처럼 보여 위험하다. 받은 데이터는 새 `.ksp6`로 백업한다.
-2. 생성한 `.fmlt`를 열어 Zone·Program·범위가 결과와 같은지 확인한다(이 확인이 11장의 `파일 해석 확인됨` 단계다).
-3. 받은 목록에서 **비어 있는 것이 확인된** 슬롯에 그 Multi **한 건만** 저장한다. Send All·Bank 전송은 절대 쓰지 않는다. 파일에 함께 들어 있는 Program 레코드를 기존 Program 위에 보내지 않는다.
+2. 생성한 `.ksp6`를 열어 해당 번호의 Multi를 고르고 Zone·Program·범위가 결과와 같은지 확인한다(이 확인이 11장의 `파일 해석 확인됨` 단계다).
+3. 받은 목록에서 **비어 있는 것이 확인된** 슬롯에 그 Multi **한 건만** 저장한다. Send All·Bank 전송은 절대 쓰지 않는다. 파일의 다른 Program·Multi는 템플릿 백업과 같은 데이터이므로 보내지 않는다.
 4. 저장 후 그 슬롯을 다시 받아 같은지 확인한다. 편집 중에는 건반 패널을 만지지 않는다(편집 버퍼가 다시 동기화되며 수정이 사라질 수 있다).
 
 ## 한계 (codec `multi-codec/0.1`)

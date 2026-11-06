@@ -62,7 +62,7 @@ def capabilities() -> dict:
         "unofficial": True,
         "file_formats": {
             "read": [".ksp6 (editor bank)", ".fmlt (single Multi export)"],
-            "write": ["fmlt (new Multi + referenced Programs)", "ksp6 (template bank with one empty record filled)"],
+            "write": ["ksp6 (default: template bank with one empty record filled)", "fmlt (partial: Multi + Program records, without the FX/algorithm records editor exports carry)"],
         },
         "multi_fields": {
             name: {"writable": f.writable, "evidence": f.evidence} for name, f in mc.FIELDS.items()
@@ -188,11 +188,13 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
 
     @server.tool(annotations=WRITES_NEW_FILE)
     def sp6_multi_build(
-        spec: dict[str, Any], output_path: str, output_format: Literal["fmlt", "ksp6"] = "fmlt"
+        spec: dict[str, Any], output_path: str, output_format: Literal["ksp6", "fmlt"] = "ksp6"
     ) -> dict:
         """Write a NEW Multi file inside the artifacts directory. Never touches the template or the keyboard.
 
-        output_path is relative to the artifacts directory and must not exist.
+        output_path is relative to the artifacts directory, must not exist and must end with
+        .ksp6 or .fmlt matching output_format. 'ksp6' (default) is a complete copy of the template
+        bank with the new Multi in one empty record; 'fmlt' lacks the editor's FX/algorithm records.
         """
         try:
             result = build(parse_spec(spec), ws, output_path, output_format)

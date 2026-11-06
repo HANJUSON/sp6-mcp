@@ -65,9 +65,9 @@ def test_inspect_validate_build_diff(ws):
     assert rd["zones"][0]["program_name"] == "Piano"
     v = payload(call(ws, "sp6_multi_validate", {"spec": sheet(ws)}))
     assert v["can_build"]
-    b = payload(call(ws, "sp6_multi_build", {"spec": sheet(ws), "output_path": "standup.fmlt"}))
+    b = payload(call(ws, "sp6_multi_build", {"spec": sheet(ws), "output_path": "standup.ksp6"}))
     assert b["phase"] == "file_built" and b["device_write_state"] == "not_sent"
-    d = payload(call(ws, "sp6_artifact_diff", {"source_path": "bank.ksp6", "artifact_path": "standup.fmlt", "source_multi_id": 1}))
+    d = payload(call(ws, "sp6_artifact_diff", {"source_path": "bank.ksp6", "artifact_path": "standup.ksp6", "source_multi_id": 1}))
     assert d["multi_field_diffs"]
 
 
@@ -82,7 +82,7 @@ def test_errors_are_structured(ws):
 
 
 def test_build_outside_artifacts_denied(ws):
-    r = call(ws, "sp6_multi_build", {"spec": sheet(ws), "output_path": "../x.fmlt"})
+    r = call(ws, "sp6_multi_build", {"spec": sheet(ws), "output_path": "../x.ksp6"})
     assert r.is_error and "OUTPUT_PATH_DENIED" in r.content[0].text
 
 

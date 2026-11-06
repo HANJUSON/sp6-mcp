@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("build")
     p.add_argument("sheet")
     p.add_argument("output")
-    p.add_argument("--format", choices=["fmlt", "ksp6"], default="fmlt")
+    p.add_argument("--format", choices=["ksp6", "fmlt"], default="ksp6")
     p = sub.add_parser("diff")
     p.add_argument("source")
     p.add_argument("artifact")

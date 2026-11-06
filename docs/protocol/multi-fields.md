@@ -13,7 +13,9 @@
 
 - `NNNN`은 4자리 객체 ID다. 빈 슬롯은 payload 길이 0으로 기록된다.
 - 레코드 밖의 바이트(Bank 머리, FX/Alg 블록 등)는 해석하지 않고 그대로 보존한다.
-- `.fmlt`는 Multi 레코드 1개 뒤에 그 Multi가 참조하는 Program 레코드들이 이어지는 형태로 관찰됐다.
+- 편집기 `.fmlt`(관찰 1개)는 Multi 레코드 1개 뒤에 Zone 순서대로 참조 Program 레코드가 이어지고, **각 Program 뒤에 그 Program의 FX 레코드(`FX***Data>NNNN`)와 알고리즘 레코드(`Alg**Data>NNNN`, Layer마다 반복)**가 붙는다. Multi·Program 레코드 부분은 같은 시점 Bank의 레코드와 바이트 단위로 같았고, FX/Alg 레코드도 모두 Bank 안에 같은 바이트열로 존재했다.
+- Program의 FX 참조는 payload 앞부분의 `03 03 51/52/53 xx <FX ID u16 BE>` 슬롯으로 관찰됐다(0이면 비어 있음). Alg 레코드와 Layer의 대응은 아직 확정하지 못했다.
+- 따라서 현재 생성기의 `.fmlt`는 FX/Alg 레코드가 빠진 **부분 형식**이다. 기본 출력은 템플릿 Bank 전체를 보존하고 빈 레코드 하나만 채우는 `.ksp6`다.
 - Multi payload 안에는 자기 슬롯 ID가 없다. 서로 다른 슬롯의 payload가 바이트 단위로 같은 사례가 있어, 슬롯 ID는 레코드 머리에서만 정해진다.
 
 로컬 검증(2026-11-06): 편집기·실기 수신으로 만든 `.ksp6` 6개와 `.fmlt` 1개가 모두 바이트 단위로 재생성됐다.
