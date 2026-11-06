@@ -142,9 +142,19 @@ def validate(spec: MultiSpec, template: TemplateInfo | None) -> ValidationReport
         base["source"] = {k: ("sheet" if k in provided else "template") for k in mc.WRITABLE_FIELDS if k in base}
         zones[n] = base
 
+    for zs in spec.zones:
+        for key, value in zs.provided().items():
+            if key in mc.WRITABLE_FIELDS:
+                try:
+                    mc.validate_value(key, value)
+                except Sp6Error as exc:
+                    report.error(exc.code, exc.message, f"zones[{zs.zone}].{key}")
+
     for n, z in zones.items():
         zspec = spec.zone(n)
         prefix = f"zones[{n}]"
+        if zspec is None and template is not None and z.get("enabled"):
+            report.warn(INVALID_SPEC, "Zone is omitted from the sheet but enabled in the template; it will stay enabled", prefix)
         if zspec is None and template is None:
             report.warn(INVALID_SPEC, "Zone not given and no template loaded; its values are unknown", prefix)
         low, high = z.get("key_low"), z.get("key_high")
@@ -180,17 +190,25 @@ def validate(spec: MultiSpec, template: TemplateInfo | None) -> ValidationReport
             report.error(INVALID_SPEC, f"Enabled zones on MIDI channel {channel} use different Programs {sorted(programs)}", "zones")
 
     if spec.range_policy == "split":
-        normal = [z for z in enabled if z.get("key_low") is not None and z.get("key_high") is not None and z["key_low"] <= z["key_high"]]
-        for i, a in enumerate(normal):
-            for b in normal[i + 1 :]:
-                if a["key_low"] <= b["key_high"] and b["key_low"] <= a["key_high"]:
-                    lo, hi = max(a["key_low"], b["key_low"]), min(a["key_high"], b["key_high"])
-                    report.error(
-                        INVALID_SPEC,
-                        f"Zones {a['zone']} and {b['zone']} overlap on {note_name(lo)}-{note_name(hi)} "
-                        "(range_policy is split; use layer for intentional overlap)",
-                        f"zones[{b['zone']}].key_low",
-                    )
+        def intervals(z: dict) -> list[tuple[int, int]]:
+            lo, hi = z.get("key_low"), z.get("key_high")
+            if lo is None or hi is None:
+                return []
+            # An inverted zone sounds below key_high and above key_low.
+            return [(lo, hi)] if lo <= hi else [(0, hi), (lo, 127)]
+
+        for i, a in enumerate(enabled):
+            for b in enabled[i + 1 :]:
+                for alo, ahi in intervals(a):
+                    for blo, bhi in intervals(b):
+                        if alo <= bhi and blo <= ahi:
+                            lo, hi = max(alo, blo), min(ahi, bhi)
+                            report.error(
+                                INVALID_SPEC,
+                                f"Zones {a['zone']} and {b['zone']} overlap on {note_name(lo)}-{note_name(hi)} "
+                                "(range_policy is split; use layer for intentional overlap)",
+                                f"zones[{b['zone']}].key_low",
+                            )
 
     if template is not None:
         c = template.container

@@ -90,6 +90,10 @@ def main(argv: list[str] | None = None) -> int:
     except Sp6Error as exc:
         _print({"status": "error", "error": exc.to_dict()})
         return 1
+    except (OSError, ValueError) as exc:
+        err = Sp6Error("IO_ERROR" if isinstance(exc, OSError) else "INVALID_SPEC", f"{type(exc).__name__}: {exc}")
+        _print({"status": "error", "error": err.to_dict()})
+        return 1
     return 0
 
 

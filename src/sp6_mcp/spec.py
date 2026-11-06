@@ -51,7 +51,7 @@ class ZoneSpec(_Strict):
     key_high: Midi | None = None
     allow_inverted_key_range: bool = False
     allow_inverted_velocity_range: bool = False
-    transpose_semitones: Annotated[int, Field(ge=-128, le=127, strict=True)] | None = None
+    transpose_semitones: Annotated[int, Field(ge=-36, le=24, strict=True)] | None = None
     velocity_low: Velocity | None = None
     velocity_high: Velocity | None = None
     volume: Level | None = None
@@ -87,6 +87,8 @@ class MultiSpec(_Strict):
     @field_validator("name")
     @classmethod
     def _name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Name must not be blank")
         if len(value) > 16:
             raise ValueError("Multi names are limited to 16 characters (Musician's Guide 4-11)")
         if any(ord(c) < 0x20 or ord(c) > 0x7E for c in value):

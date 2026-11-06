@@ -6,7 +6,7 @@
 
 이 프로젝트는 **LLM이 신디사이저 설정을 수행할 수 있게 하여, 초보자도 합주·공연용 세팅을 대화로 쉽게 준비하는 것**을 목표로 한다. 이 문서는 그 요구사항과 개발 계획이다.
 
-> **현재 상태(2026-11-06, v0.6.1)**
+> **현재 상태(2026-11-06, v0.7.0)**
 >
 > - **구현됨(오프라인):** `.ksp6`/`.fmlt` 바이트 보존 읽기·쓰기, 근거가 확인된 Multi Zone 필드 codec, 설정표 schema·검증, 새 Multi 파일 생성(기본 `.ksp6`, 부분 형식 `.fmlt`)과 차이 비교, MCP stdio 서버와 CLI. 사용법은 [docs/usage.md](docs/usage.md), 필드 근거는 [docs/protocol/multi-fields.md](docs/protocol/multi-fields.md).
 > - **쓸 수 있는 Multi 필드:** 이름, Zone 켜짐, MIDI Channel, Program, Key Low/High, Transpose. Volume·Pan은 읽기만 하고, Velocity·컨트롤러·Arp 버튼·페달·FX는 템플릿 값을 그대로 둔다(요청하면 `UNSUPPORTED_FIELD`).

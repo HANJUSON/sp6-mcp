@@ -42,7 +42,7 @@ def test_build_fmlt(ws):
     assert (ws.work_root / "private" / "bank.ksp6").read_bytes() == before  # source untouched
     c = Container(r.output_path.read_bytes())
     assert [(x.kind, x.object_id) for x in c.records][0] == ("multi", 1026)
-    assert r.report["included_program_ids"] == [87, 1200, 1]  # every zone, as in editor exports
+    assert r.report["included_program_ids"] == [87, 1]  # user Program 1200 deliberately left out
     v = mc.decode(c.get("multi", 1026).payload)
     assert v.name == "STANDUP_LIVE"
     assert [z.values["enabled"] for z in v.zones] == [True, True, False, False]
@@ -118,3 +118,24 @@ def test_extension_must_match_format(ws):
 def test_fmlt_is_flagged_partial(ws):
     r = build(sheet(ws), ws, "p.fmlt", "fmlt")
     assert any(w["code"] == "PARTIAL_EXPORT" for w in r.report["warnings"])
+
+
+@pytest.mark.parametrize("path", ["prev.ksp6:evil.ksp6", "x.ksp6.", "dir. /x.ksp6", "sub/aux.ksp6", "CON.ksp6", "a?.ksp6"])
+def test_unsafe_windows_names_denied(ws, path):
+    with pytest.raises(Sp6Error) as e:
+        build(sheet(ws), ws, path)
+    assert e.value.code in ("OUTPUT_PATH_DENIED", "INVALID_SPEC")  # "x.ksp6." fails the extension rule first
+
+
+def test_write_new_file_never_deletes_foreign_files(tmp_path):
+    from sp6_mcp.workspace import write_new_file
+    foreign = tmp_path / "out.ksp6.partial"
+    foreign.write_bytes(b"USER DATA")
+    existing = tmp_path / "taken.ksp6"
+    existing.write_bytes(b"KEEP")
+    write_new_file(tmp_path / "out.ksp6", b"new")
+    assert foreign.read_bytes() == b"USER DATA"
+    with pytest.raises(Sp6Error):
+        write_new_file(existing, b"overwrite?")
+    assert existing.read_bytes() == b"KEEP"
+    assert not list(tmp_path.glob(".sp6tmp-*"))

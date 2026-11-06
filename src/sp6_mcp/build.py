@@ -51,7 +51,9 @@ def _program_records(container: Container, payload: bytes) -> list[Record]:
             continue
         seen.add(pid)
         rec = container.get("program", pid)
-        if rec is not None and not rec.empty:
+        # User Programs are left out so an editor import can never carry a
+        # stale copy over a Program saved on the keyboard.
+        if rec is not None and not rec.empty and pid < 1025:
             out.append(rec)
     return out
 
@@ -141,12 +143,13 @@ def build(
         "device_write_state": "not_sent",
     }
     manifest = {"sheet": spec.model_dump(mode="json"), "result": result_report}
-    write_new_file(target, data)
     try:
+        write_new_file(target, data)
         write_new_file(manifest_path, (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
-    except Exception:
-        target.unlink(missing_ok=True)
+    except Sp6Error:
         raise
+    except OSError as exc:
+        raise Sp6Error("OUTPUT_PATH_DENIED", f"Could not write output: {exc}", "output_path") from None
     result_report["manifest_path"] = str(manifest_path)
     return BuildResult(artifact_id, target, manifest_path, out_sha, result_report)
 

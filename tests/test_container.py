@@ -66,3 +66,16 @@ def test_single_object_export_layout():
 def test_bad_object_id():
     with pytest.raises(Sp6Error):
         encode_record("multi", 10000, b"")
+
+
+def test_corrupted_suffix_cannot_swallow_records():
+    a = b"Prog*Dat*>0001Prog_Dat*>AAAA<Prog_Dat*<Prog*Dat*0009"  # bad suffix ID
+    b = encode_record("program", 2, b"BBBB")
+    c = encode_record("program", 1, b"CCCC")
+    with pytest.raises(Sp6Error):
+        Container(a + b + c)
+
+
+def test_payload_with_envelope_rejected_on_encode():
+    with pytest.raises(Sp6Error):
+        encode_record("multi", 1, b"x<Set*-Dat*<Set**Dat*y")

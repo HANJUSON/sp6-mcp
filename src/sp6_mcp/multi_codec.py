@@ -146,6 +146,8 @@ def decode(payload: bytes) -> MultiView:
     ends = offsets[1:] + [len(payload)]
     zones = []
     for index, (start, end) in enumerate(zip(offsets, ends), start=1):
+        if end - start < 33:
+            raise Sp6Error(UNSUPPORTED_FORMAT, f"Zone {index} block is too short ({end - start} bytes)")
         b = payload
         values: dict[str, Any] = {
             "enabled": b[start + 2] == 2,
@@ -166,7 +168,7 @@ def decode(payload: bytes) -> MultiView:
     return MultiView(name, tuple(zones))
 
 
-def _validate_value(field: str, value: Any) -> None:
+def validate_value(field: str, value: Any) -> None:
     def bad(msg: str) -> Sp6Error:
         return Sp6Error(INVALID_SPEC, msg, field)
 
@@ -186,8 +188,8 @@ def _validate_value(field: str, value: Any) -> None:
     elif field == "transpose_semitones":
         # Observed range in editor data is -36..+24. The device limit is not
         # verified, so stay within the observed envelope.
-        if not isinstance(value, int) or isinstance(value, bool) or not -36 <= value <= 36:
-            raise bad("transpose_semitones must be -36..36 (verified envelope)")
+        if not isinstance(value, int) or isinstance(value, bool) or not -36 <= value <= 24:
+            raise bad("transpose_semitones must be -36..24 (observed envelope)")
 
 
 def encode_name(name: str) -> bytes:
@@ -219,7 +221,7 @@ def apply(payload: bytes, name: str | None, zone_changes: dict[int, dict[str, An
                     f"zones[{zone}].{field}",
                     details={"writable_fields": list(WRITABLE_FIELDS)},
                 )
-            _validate_value(field, value)
+            validate_value(field, value)
 
     out = bytearray(payload)
     if name is not None:

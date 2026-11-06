@@ -50,7 +50,9 @@ def _ok(result: Any, *, phase: str | None = None, warnings: list | None = None, 
     }
 
 
-def _fail(exc: Sp6Error) -> ToolError:
+def _fail(exc: Exception) -> ToolError:
+    if not isinstance(exc, Sp6Error):
+        exc = Sp6Error("UNSUPPORTED_FORMAT" if isinstance(exc, ValueError) else "IO_ERROR", f"{type(exc).__name__}: {exc}")
     return ToolError(json.dumps({"status": "error", "error": exc.to_dict()}, ensure_ascii=False))
 
 
@@ -133,7 +135,7 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
                 },
                 warnings=["empty_in_file means empty in this file only; receive from the keyboard before saving"],
             )
-        except Sp6Error as exc:
+        except (Sp6Error, OSError, ValueError) as exc:
             raise _fail(exc) from None
 
     @server.tool(annotations=READ_ONLY)
@@ -152,7 +154,7 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
             for r in rows:
                 r["user"] = 1025 <= r["id"] <= 2048
             return _ok({"file_sha256": c.sha256, "total": len(rows), "matches": rows[:limit]})
-        except Sp6Error as exc:
+        except (Sp6Error, OSError, ValueError) as exc:
             raise _fail(exc) from None
 
     @server.tool(annotations=READ_ONLY)
@@ -168,7 +170,7 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
                 prog = c.get("program", zone["program_id"])
                 zone["program_name"] = prog.name if prog is not None and not prog.empty else None
             return _ok(view, evidence={"file_sha256": c.sha256, "multi_id": multi_id})
-        except Sp6Error as exc:
+        except (Sp6Error, OSError, ValueError) as exc:
             raise _fail(exc) from None
 
     @server.tool(annotations=READ_ONLY)
@@ -183,7 +185,7 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
             template = load_template(sheet, ws.input_path(sheet.template.source_path))
             report = validate(sheet, template).to_dict()
             return _ok(report, phase="sheet_validated" if report["valid"] else None)
-        except Sp6Error as exc:
+        except (Sp6Error, OSError, ValueError) as exc:
             raise _fail(exc) from None
 
     @server.tool(annotations=WRITES_NEW_FILE)
@@ -199,7 +201,7 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
         try:
             result = build(parse_spec(spec), ws, output_path, output_format)
             return _ok(result.report, phase="file_built", warnings=result.report["warnings"])
-        except Sp6Error as exc:
+        except (Sp6Error, OSError, ValueError) as exc:
             raise _fail(exc) from None
 
     @server.tool(annotations=READ_ONLY)
@@ -216,7 +218,7 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
             if not art.is_file():
                 raise Sp6Error("SOURCE_NOT_FOUND", f"Artifact not found: {artifact_path}", "artifact_path")
             return _ok(diff_files(src, art.resolve(), source_multi_id))
-        except Sp6Error as exc:
+        except (Sp6Error, OSError, ValueError) as exc:
             raise _fail(exc) from None
 
     return server

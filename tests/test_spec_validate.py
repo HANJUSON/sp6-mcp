@@ -72,6 +72,10 @@ def test_inverted_range_needs_confirmation(template_file):
     d["zones"][0].update(key_low=83, key_high=21)
     assert not run(d, template_file).valid
     d["zones"][0]["allow_inverted_key_range"] = True
+    r = run(d, template_file)
+    # 83/21 sounds on 0-21 and 83-127, which still overlaps zone 2 (84-108).
+    assert any("overlap" in e.message for e in r.errors)
+    d["zones"][1]["enabled"] = False
     assert run(d, template_file).valid
 
 
@@ -141,3 +145,22 @@ def test_example_sheet_parses():
     data = json.loads((Path(__file__).parents[1] / "examples" / "standup.sheet.example.json").read_text(encoding="utf-8"))
     spec = parse_spec(data)
     assert spec.zone(2).transpose_semitones == -24
+
+
+def test_transpose_envelope_agrees_with_codec(template_file):
+    d = sheet(template_file)
+    d["zones"][1]["transpose_semitones"] = 25
+    with pytest.raises(Sp6Error):
+        parse_spec(d)
+
+
+def test_blank_name_rejected(template_file):
+    with pytest.raises(Sp6Error):
+        parse_spec(sheet(template_file, name="   "))
+
+
+def test_omitted_enabled_zone_warns(template_file):
+    d = sheet(template_file)
+    d["zones"] = d["zones"][:2]
+    r = run(d, template_file)
+    assert any(w.field == "zones[3]" and w.severity == "warning" for w in r.issues)

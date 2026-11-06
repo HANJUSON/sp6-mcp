@@ -10,10 +10,14 @@ the current directory and ``<work root>/artifacts``.
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
 from .errors import OUTPUT_PATH_DENIED, SOURCE_NOT_FOUND, Sp6Error
+
+
+_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,10 @@ class Workspace:
             raise Sp6Error(OUTPUT_PATH_DENIED, "output_path must be relative to the artifacts directory", "output_path")
         if any(part == ".." for part in pure.parts):
             raise Sp6Error(OUTPUT_PATH_DENIED, "output_path may not contain '..'", "output_path")
+        for part in pure.parts:
+            stem = part.split(".")[0].upper()
+            if ":" in part or part != part.rstrip(". ") or stem in _RESERVED or any(c in part for c in '<>"|?*'):
+                raise Sp6Error(OUTPUT_PATH_DENIED, f"output_path part {part!r} is not a safe Windows file name", "output_path")
         base = self.artifacts_dir.resolve()
         base.mkdir(parents=True, exist_ok=True)
         target = (base / pure).resolve()  # resolves symlinks / junctions that exist
@@ -59,16 +67,25 @@ class Workspace:
 
 
 def write_new_file(path: Path, data: bytes) -> None:
-    """Create ``path`` exclusively; remove partial output on failure."""
+    """Create ``path`` exclusively. Never overwrites, never deletes a file it did not create."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    partial = path.with_name(path.name + ".partial")
+    fd, tmp_name = tempfile.mkstemp(prefix=".sp6tmp-", dir=path.parent)
+    tmp = Path(tmp_name)
     try:
-        with open(partial, "xb") as fh:
+        with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        # os.link + unlink keeps "never overwrite" semantics on Windows too.
-        os.link(partial, path)
+        try:
+            os.link(tmp, path)  # fails if path exists: no overwrite
+        except FileExistsError:
+            raise Sp6Error(OUTPUT_PATH_DENIED, "output_path already exists; choose a new name", "output_path") from None
+        except OSError:
+            # File systems without hard links: exclusive create instead.
+            try:
+                with open(path, "xb") as fh:
+                    fh.write(data)
+            except FileExistsError:
+                raise Sp6Error(OUTPUT_PATH_DENIED, "output_path already exists; choose a new name", "output_path") from None
     finally:
-        if partial.exists():
-            partial.unlink()
+        tmp.unlink(missing_ok=True)

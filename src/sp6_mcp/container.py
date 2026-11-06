@@ -76,6 +76,8 @@ def encode_record(kind: str, object_id: int, payload: bytes) -> bytes:
     if not 0 <= object_id <= 9999:
         raise Sp6Error(UNSUPPORTED_FORMAT, f"Object ID {object_id} does not fit 4 digits")
     prefix, middle, suffix = ENVELOPES[kind]
+    if any(m in payload for env in ENVELOPES.values() for m in (env[0], env[2])):
+        raise Sp6Error(UNSUPPORTED_FORMAT, "Payload contains a record envelope")
     ident = f"{object_id:04d}".encode("ascii")
     return prefix + ident + middle + payload + suffix + ident
 
@@ -107,6 +109,13 @@ class Container:
                     raise Sp6Error(UNSUPPORTED_FORMAT, f"Duplicate {kind} record {object_id}")
                 seen.add(object_id)
                 records.append(Record(kind, object_id, match[2], match.start(), match.end()))
+        markers = [m for env in ENVELOPES.values() for m in (env[0], env[2])]
+        for record in records:
+            if any(m in record.payload for m in markers):
+                raise Sp6Error(
+                    UNSUPPORTED_FORMAT,
+                    f"{record.kind} {record.object_id} payload contains a record envelope; the file is damaged",
+                )
         records.sort(key=lambda r: r.start)
         if not records:
             raise Sp6Error(UNSUPPORTED_FORMAT, "No Program or Multi records found")
