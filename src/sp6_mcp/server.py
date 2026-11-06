@@ -77,7 +77,7 @@ def capabilities() -> dict:
             "the keyboard; never Send All.",
         },
         "tools": [
-            "sp6_capabilities", "sp6_spec_schema", "sp6_file_inspect", "sp6_multi_read",
+            "sp6_capabilities", "sp6_spec_schema", "sp6_file_inspect", "sp6_object_find", "sp6_multi_read",
             "sp6_multi_validate", "sp6_multi_build", "sp6_artifact_diff",
         ],
     }
@@ -133,6 +133,25 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
                 },
                 warnings=["empty_in_file means empty in this file only; receive from the keyboard before saving"],
             )
+        except Sp6Error as exc:
+            raise _fail(exc) from None
+
+    @server.tool(annotations=READ_ONLY)
+    def sp6_object_find(path: str, query: str, kind: Literal["program", "multi"] = "program", limit: int = 20) -> dict:
+        """Find Programs or Multis whose name contains query (case-insensitive) in a file.
+
+        Use this to turn names such as "Prophet Pad" into IDs. Names come only
+        from the given file; factory names are not bundled with this server.
+        """
+        try:
+            if not query.strip() or not 1 <= limit <= 200:
+                raise Sp6Error(INVALID_SPEC, "query must be non-empty and limit 1-200", "query")
+            c = Container.from_path(ws.input_path(path))
+            needle = query.casefold().strip()
+            rows = [r for r in c.listing([kind]) if r["name"] and needle in r["name"].casefold()]
+            for r in rows:
+                r["user"] = 1025 <= r["id"] <= 2048
+            return _ok({"file_sha256": c.sha256, "total": len(rows), "matches": rows[:limit]})
         except Sp6Error as exc:
             raise _fail(exc) from None
 

@@ -94,3 +94,10 @@ def test_stdio_server_starts_and_lists_tools(ws, monkeypatch):
             return await client.list_tools()
     tools = asyncio.run(go()).tools
     assert "sp6_multi_build" in {t.name for t in tools}
+
+
+def test_object_find(ws):
+    r = payload(call(ws, "sp6_object_find", {"path": "bank.ksp6", "query": "pa"}))
+    assert [(m["id"], m["name"], m["user"]) for m in r["matches"]] == [(87, "Pad", False)]
+    r = payload(call(ws, "sp6_object_find", {"path": "bank.ksp6", "query": "user", "kind": "multi"}))
+    assert r["matches"][0]["id"] == 1025 and r["matches"][0]["user"]

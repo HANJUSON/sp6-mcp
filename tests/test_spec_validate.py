@@ -133,3 +133,11 @@ def test_note_names():
 def test_schema_exports():
     s = spec_json_schema()
     assert s["additionalProperties"] is False
+
+
+def test_example_sheet_parses():
+    import json
+    from pathlib import Path
+    data = json.loads((Path(__file__).parents[1] / "examples" / "standup.sheet.example.json").read_text(encoding="utf-8"))
+    spec = parse_spec(data)
+    assert spec.zone(2).transpose_semitones == -24

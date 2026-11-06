@@ -1,0 +1,19 @@
+{
+  "schema_version": "1",
+  "operation": "create_multi",
+  "name": "STANDUP_LIVE",
+  "preferred_user_multi_id": 1055,
+  "template": {
+    "source_path": "private/backups/your-sp6-backup.ksp6",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "kind": "multi",
+    "id": 1
+  },
+  "range_policy": "split",
+  "zones": [
+    { "zone": 1, "enabled": true, "program_id": 87, "midi_channel": 1, "key_low": 21, "key_high": 83, "transpose_semitones": 0 },
+    { "zone": 2, "enabled": true, "program_id": 1200, "midi_channel": 2, "key_low": 84, "key_high": 108, "transpose_semitones": -24 },
+    { "zone": 3, "enabled": false },
+    { "zone": 4, "enabled": false }
+  ]
+}

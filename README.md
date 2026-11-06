@@ -6,13 +6,14 @@
 
 이 프로젝트는 **LLM이 신디사이저 설정을 수행할 수 있게 하여, 초보자도 합주·공연용 세팅을 대화로 쉽게 준비하는 것**을 목표로 한다. 이 문서는 그 요구사항과 개발 계획이다.
 
-> **현재 상태(2026-11-06)**
+> **현재 상태(2026-11-06, v0.6.0)**
 >
-> - 기존 `.ksp6` 파일의 일부 컨테이너 구조 읽기와 내용 변경 없는 재생성 실험까지 확인했다.
-> - MCP 서버, 새 Multi 설정 파일 생성기, 건반 직접 저장 기능은 미구현이다.
+> - **구현됨(오프라인):** `.ksp6`/`.fmlt` 바이트 보존 읽기·쓰기, 근거가 확인된 Multi Zone 필드 codec, 설정표 schema·검증, 새 Multi 파일 생성(`.fmlt`/`.ksp6`)과 차이 비교, MCP stdio 서버와 CLI. 사용법은 [docs/usage.md](docs/usage.md), 필드 근거는 [docs/protocol/multi-fields.md](docs/protocol/multi-fields.md).
+> - **쓸 수 있는 Multi 필드:** 이름, Zone 켜짐, MIDI Channel, Program, Key Low/High, Transpose. Volume·Pan은 읽기만 하고, Velocity·컨트롤러·Arp 버튼·페달·FX는 템플릿 값을 그대로 둔다(요청하면 `UNSUPPORTED_FIELD`).
+> - **미구현:** 건반 식별·수신·저장(P3·P4). 생성 파일을 편집기가 정상 해석하는지, 건반에 보내 저장되는지는 아직 확인하지 않았다(11장 `파일 생성됨` 단계까지).
 > - 건반은 연결 해제 상태이며, 실기 작업은 사용자 재개 지시와 연결 후 진행한다.
-> - 공개 저장소에는 README와 `.gitignore`만 있다. 실험 코드·백업·검사 보고서는 별도의 로컬 개발 자료로 보관한다.
-> - 아래 구현 현황과 실험 기록은 이 날짜를 기준으로 한다. 기능·성능 목표는 11장의 단계별 완료 기준으로 판정한다.
+> - 개인 백업·생성 파일·검사 보고서는 저장소에 넣지 않는다(`.gitignore`). 테스트는 합성 데이터만 쓴다.
+> - 라이선스: MIT([LICENSE](LICENSE)). 이 저장소의 코드·문서에만 적용되며, 제조사·사용자 음색 데이터에는 적용되지 않는다(IP-02).
 
 ## 1. 목적
 
@@ -61,8 +62,8 @@
 |---|---|
 | `.ksp6` 컨테이너 | 기존 파일에서 Program/Multi 레코드의 번호, 이름, 원본 payload와 빈 payload를 읽을 수 있다. |
 | 무변경 파일 재생성 | 8,203,199-byte 백업을 읽고 레코드를 다시 생성했을 때 원본과 바이트 및 SHA-256이 일치했다. |
-| Multi 내부 필드 | 범위·Program·컨트롤러 등을 일반적으로 읽고 쓰는 검증된 codec은 미구현이다. |
-| 새 Stand Up 파일 | 미생성. 무변경 재생성 검사는 원본 보존의 근거이며, 새 설정의 정확성은 별도 검증 대상이다. |
+| Multi 내부 필드 | `multi-codec/0.1`: Zone 켜짐·Channel·Program·Key 범위·Transpose를 읽고 쓴다. Multi 1050의 실기 수신 기록, 편집 전후 스냅샷과 일치하며, 같은 편집을 codec으로 재현하면 편집기 결과와 해당 바이트가 모두 같다. Volume·Pan은 읽기 전용. Velocity·컨트롤러·Arp는 미해석. |
+| 새 Stand Up 파일 | 2026-11-06 백업을 템플릿으로 로컬 생성·재해석 확인(87/1200, 21–83/84–108, −24 ST). 편집기 열기·실기 저장은 미확인. Volume 90/105, 컨트롤러, Arp 버튼은 템플릿 값 그대로다. |
 | MIDI 연결 | 과거 연결에서 Identity 응답과 편집기를 통한 개별 Program/Multi 수신을 확인했다. 자체 도구의 SP6 객체 수신·쓰기 프로토콜은 미구현이다. |
 | GUI 대체 | SoundTower가 개발한 SP6 Sound Editor는 MIDI로 개별 Program/Multi/Effect와 전체 Bank를 송수신한다. 직접 데이터 처리 경로의 존재는 확인했지만, 본 프로젝트가 사용할 쓰기 명세는 확보·검증이 필요하다. |
 | 기종 호환 | 다른 Kurzweil 기종의 파일/프로토콜은 참고 자료다. PC3 등의 구현을 SP6와 동일하다고 가정하지 않는다. |
@@ -292,26 +293,26 @@ flowchart LR
 - **stdio:** 초기 연결 방식은 stdio다. 표준 출력은 MCP 메시지 전용이며, 진단 로그는 표준 오류/로컬 파일로 보낸다. [MCP stdio 전송 공식 명세](https://modelcontextprotocol.io/specification/latest/basic/transports/stdio)를 따른다.
 - **조작 경로:** GUI 좌표나 스크린샷에 의존하지 않는다. SP6 Sound Editor로 생성 파일을 열어 보는 검증은 보조 수단이며, 정상 경로를 GUI 자동 조작으로 구현하지 않는다.
 
-권장 코드 배치다. 구현·시험 디렉터리는 11장의 개발 단계에 따라 생성한다.
+현재 코드 배치다(v0.6.0). `midi/`와 장치 시뮬레이터는 P3에서 추가한다.
 
 ```text
 sp6-mcp/
-  README.md
-  .gitignore
+  README.md, LICENSE, pyproject.toml
   src/sp6_mcp/
-    server.py          # MCP 도구와 schema
-    models/            # 설정표와 상태 모델
-    codec/             # container / Multi / 향후 Program
-    service/           # build / diff / write plan
-    midi/              # transport / protocol / 장치 잠금
-    storage/           # artifacts / 작업 기록
-  tests/
-    fixtures/          # 합성 데이터 또는 공개 권한을 확보한 샘플
-    codec/
-    mcp/
-    simulated_device/
-  docs/protocol/       # 필드 근거, 지원 기종/버전
-  artifacts/           # 생성물, 원본 백업과 분리
+    container.py       # .ksp6/.fmlt 레코드 보존 읽기·쓰기
+    multi_codec.py     # 근거가 확인된 Multi Zone 필드
+    spec.py            # 설정표 JSON 모델
+    validate.py        # 교차 검증·의존성·빈 슬롯 경고
+    build.py           # 새 Multi 파일 생성·검증·차이 비교
+    workspace.py       # 입력 루트 / artifacts 출력 경로 정책
+    server.py          # MCP stdio 도구
+    cli.py             # 같은 코어의 명령줄
+  tests/               # 합성 데이터만 사용 (synth.py)
+  scripts/             # 로컬 비공개 백업 검증 도구
+  docs/usage.md        # 설치·등록·사용 흐름
+  docs/protocol/       # 필드 근거
+  examples/            # 설정표 예시
+  artifacts/           # 생성물 (git 제외)
 ```
 
 구현 시 이 README를 계획의 진입점으로 유지한다. 개인 백업이나 연주 자료를 사용자의 공개 허용 없이 공개 fixture에 포함하지 않는다.
@@ -321,7 +322,7 @@ sp6-mcp/
 | ID | 요구사항 |
 |---|---|
 | NFR-01 | 오프라인 기능은 장치 없이 시작·사용할 수 있다. 파서나 모델을 import할 때 MIDI 포트를 열지 않는다. |
-| NFR-02 | 8.2 MB 기준 파일의 읽기와 무변경 재생성은 각각 준비된 프로세스에서 P95 **2초 이내를 목표**로 한다. 측정 환경, Python/codec 버전과 측정 횟수를 기록한다. 달성 완료를 의미하지 않는다. |
+| NFR-02 | 8.2 MB 기준 파일의 읽기와 무변경 재생성은 각각 준비된 프로세스에서 P95 **2초 이내를 목표**로 한다. 측정 환경, Python/codec 버전과 측정 횟수를 기록한다. 2026-11-06 측정(Windows 11, Python 3.14.2, v0.5, 30회): 읽기(자체 round-trip 검사 포함) P95 0.048초, 재생성 P95 0.011초. |
 | NFR-03 | codec 지원 후 정형 Multi 생성에는 이미지 인식 0회, 파라미터별 모델 왕복 0회를 요구한다. 실기 저장까지 정상 작업 흐름은 약 5회 이내의 MCP 호출을 목표로 한다. |
 | NFR-04 | MIDI 전송 시간·본체 메모리 저장 시간과 서버 처리 시간을 구분해 기록한다. 장치 응답 대기는 시간 제한을 가지며, 무기한 대기·고정된 긴 sleep·무제한 재시도를 하지 않는다. |
 | NFR-05 | 같은 입력/템플릿/codec 버전은 같은 생성 바이트를 만든다. 날짜 등 가변 메타데이터는 외부 manifest에 분리한다. |
@@ -339,6 +340,8 @@ sp6-mcp/
 | **P3 — 실기 읽기** | Identity, 개별 객체 수신, 빈 상태 확인 | 사용자 재개 지시와 연결 후 대상 SP6/버전에서 수신·시간 초과·연결 해제를 검증한다. 미수신을 빈 상태로 취급하지 않는다. |
 | **P4 — 실기 한 건 저장** | 쓰기 계획, 저장, 영구 메모리 수신 비교 | 검증된 빈 User Multi에 한 건을 추가한다. 기존 슬롯 보호, 응답 불명확 시 중복 쓰기 방지를 확인하고 저장 결과를 기록한다. |
 | **P5 — 추가 기능** | Program/Arp 상세 편집, 간단한 화면, 지원 범위 확장 | 개별 요구사항과 검증 근거를 추가한 뒤 구현한다. MVP 완료 조건에는 포함하지 않는다. |
+
+**진행 현황(2026-11-06, v0.6.0):** P1은 완료 조건 중 대상 클라이언트 연결 확인만 남았다(테스트에서는 SDK 클라이언트로 stdio 연결 확인). P2는 파일 생성·재해석·차이 비교·미지원 필드 거부까지 구현했고, "편집기의 해석과 일치" 확인이 남았다. P3 이후는 미착수.
 
 **첫 착수점은 P1과 P2의 codec 조사다.** MCP 인터페이스 제공은 P1, 파일 생성 MVP 완료는 P2 기준으로 판정하며, 전체 하드웨어 기능 완료와 구분한다.
 
