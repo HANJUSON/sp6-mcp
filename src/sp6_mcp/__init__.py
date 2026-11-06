@@ -3,4 +3,4 @@
 Nothing in this package opens a MIDI port or talks to an instrument.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
