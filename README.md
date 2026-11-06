@@ -1,8 +1,18 @@
 # SP6 MCP — 요구사항 명세서 및 개발 계획
 
-문서 버전: **0.1** · 작성일: **2026-11-06** · 대상: **Kurzweil SP6 88건반 / Windows**
+> Kurzweil/Young Chang과 무관한 비공식 개인 프로젝트이며, 공식 승인·제휴가 없다.
 
-> 이 문서는 개발할 시스템의 요구사항이다. 현재 구현된 것은 기존 `.ksp6` 파일의 일부 컨테이너 구조 읽기와 내용 변경 없는 재생성 실험이다. **MCP 서버, 새 Multi 설정 파일 생성기, 건반 직접 저장 기능은 아직 구현되지 않았다.** 현재 건반은 연결 해제 상태이며, 이 계획 수립은 하드웨어 작업 재개를 의미하지 않는다.
+문서 버전: **0.2** · 작성·검토 반영일: **2026-11-06** · 대상: **Kurzweil SP6 88건반 / Windows**
+
+이 문서는 개발할 시스템의 요구사항이다.
+
+> **현재 상태(2026-11-06)**
+>
+> - 기존 `.ksp6` 파일의 일부 컨테이너 구조 읽기와 내용 변경 없는 재생성 실험까지 확인했다.
+> - MCP 서버, 새 Multi 설정 파일 생성기, 건반 직접 저장 기능은 미구현이다.
+> - 건반은 연결 해제 상태이며, 실기 작업은 사용자 재개 지시와 연결 후 진행한다.
+> - 공개 저장소에는 README와 `.gitignore`만 있다. 실험 코드·백업·검사 보고서는 별도의 로컬 개발 자료로 보관한다.
+> - 아래 구현 현황과 실험 기록은 이 날짜를 기준으로 한다. 기능·성능 목표는 11장의 단계별 완료 기준으로 판정한다.
 
 ## 1. 목적
 
@@ -12,7 +22,7 @@
 
 핵심 요구사항은 다음 세 가지다.
 
-1. **속도:** 정상 작업 경로에서 파라미터마다 화면을 읽거나 마우스로 조작하지 않는다.
+1. **속도:** 정상 작업 경로에서 파라미터마다 화면을 읽거나 마우스로 조작하지 않는다. 오프라인 MVP(P2)의 자동화 목표는 파일 생성까지이며, P4 이전의 실기 전송·저장은 사용자의 편집기 조작을 거친다.
 2. **보존:** 기존 밴드 설정, Factory/User 음색과 Multi를 덮어쓰거나 초기화하지 않는다. 새 저장은 항상 확인된 빈 슬롯에 한다.
 3. **정확성:** 파일 생성, 전송, 건반 영구 저장, 실제 청음 완료를 서로 다른 상태로 보고한다.
 
@@ -27,11 +37,14 @@
 
 서버는 초보자에게 음색 이름, 담당 건반 범위, 실제 음높이, 볼륨, 켜짐 상태를 중심으로 설명한다. 원시 바이트·SysEx·내부 오프셋은 진단 자료에서 제공한다. 모호한 음이름이나 겹침 의도만 필요한 경우 확인하고, 이미 명확한 값은 반복해서 질문하지 않는다.
 
+음색 이름과 공장/사용자 템플릿은 사용자가 제공한 로컬 백업이나 장치 수신 자료에서 가져온다. 조회할 자료가 없으면 번호만 표시한다. 이름을 추정하거나 공장 Program 이름표를 저장소에 동봉하는 대신, 조회 출처와 해시를 추적한다.
+
 | 용어 | 의미 |
 |---|---|
 | Program | 피아노·스트링·리드 등 개별 음색. Multi와 별도의 번호 공간을 사용한다. |
 | Multi | 최대 4개 Zone의 Program·범위·컨트롤러 등을 조합한 연주 설정. |
 | Zone | 한 Program을 배치하는 구역. 분할 또는 의도적인 겹침이 가능하다. |
+| Zone Arp 버튼 (`arp_button`) | `yes`는 해당 Zone에서 ARP ON/OFF 버튼 제어를 허용하고, `no`는 해당 Zone의 Arp를 끈다. Multi를 불러온 직후 실제 Arp On 상태와는 별개다. 패턴 등 Arp 설정은 Program에 속한다. |
 | 설정표 | 파일 형식과 무관한 JSON 목표값. 생성 파일과 별도 보관한다. |
 | Artifact | 생성 파일, 설정표, 검증·변경 보고서와 해시를 묶은 산출물. |
 | Edit buffer | 현재 편집 중인 임시 데이터. 영구 저장 완료로 취급하지 않는다. |
@@ -39,17 +52,15 @@
 
 ## 3. 현재 확보한 근거와 한계
 
-| 항목 | 현재 상태 |
+| 항목 | 확인 상태(2026-11-06) |
 |---|---|
 | `.ksp6` 컨테이너 | 기존 파일에서 Program/Multi 레코드의 번호, 이름, 원본 payload와 빈 payload를 읽을 수 있다. |
 | 무변경 파일 재생성 | 8,203,199-byte 백업을 읽고 레코드를 다시 생성했을 때 원본과 바이트 및 SHA-256이 일치했다. |
 | Multi 내부 필드 | 범위·Program·컨트롤러 등을 일반적으로 읽고 쓰는 검증된 codec은 미구현이다. |
-| 새 Stand Up 파일 | 아직 생성하지 않았다. 무변경 재생성 성공이 새 설정의 정확성을 입증하지는 않는다. |
+| 새 Stand Up 파일 | 미생성. 무변경 재생성 검사는 원본 보존의 근거이며, 새 설정의 정확성은 별도 검증 대상이다. |
 | MIDI 연결 | 과거 연결에서 Identity 응답과 편집기를 통한 개별 Program/Multi 수신을 확인했다. 자체 도구의 SP6 객체 수신·쓰기 프로토콜은 미구현이다. |
 | GUI 대체 | SoundTower는 MIDI로 개별 객체를 송수신한다. 직접 데이터 처리 경로의 존재는 확인했지만, 본 프로젝트가 사용할 쓰기 명세는 확보·검증이 필요하다. |
 | 기종 호환 | 다른 Kurzweil 기종의 파일/프로토콜은 참고 자료다. PC3 등의 구현을 SP6와 동일하다고 가정하지 않는다. |
-
-기초 실험의 코드·백업·검사 보고서는 별도의 로컬 개발 자료로 보관하고 있다. 이 공개 저장소에는 현재 요구사항 명세서와 파일 제외 규칙만 포함하며, 해당 실험 코드나 제조사/사용자 음색 데이터는 포함하지 않는다.
 
 기준 백업에는 User Program 172개와 User Multi 30개가 들어 있었으며 무변경 재생성 결과는 원본과 정확히 일치했다. 일부 앞선 백업에는 User Multi payload가 없었다. 따라서 파일의 빈 payload만으로 실제 장치의 빈 슬롯이나 백업 완전성을 판단하지 않는 것이 필수 요구사항이다.
 
@@ -62,10 +73,17 @@
 - 연결 없이 `.ksp6` 파일을 분석하고 객체·슬롯 목록을 제공한다.
 - 검증된 템플릿의 사본으로 최대 4개 Zone의 Multi를 만든다.
 - Program 선택, 범위, Transpose, Volume/Pan, Zone On/Off를 우선 지원한다.
-- 이어서 Arp 적용 여부, ModWheel/Filter1의 Zone별 활성화 및 초기값을 지원한다.
+- 이어서 Zone Arp 버튼 제어 허용 여부, ModWheel/Filter1의 Zone별 활성화 및 초기값을 지원한다.
 - 원본과 관련 없는 객체, 미해석 데이터, 페달·Pitch Wheel·FX 등 요청하지 않은 설정은 보존한다.
 - 생성 파일과 사람이 읽을 수 있는 변경 보고서를 제공한다.
 - 검증되지 않은 내부 필드는 명확한 미지원 오류를 반환한다.
+
+MVP 사용자 흐름은 다음과 같다.
+
+1. 사용자 로컬 백업에서 이름·해시가 확인된 템플릿을 선택하고 MCP로 설정 검증·파일 생성을 수행한다.
+2. P2부터 P4 직접 저장이 검증되기 전까지는 생성 파일을 사용자가 SP6 Sound Editor로 연다. 편집기가 파일을 해석하는지 확인한 뒤 **해당 Multi 한 건만** 전송한다.
+3. 본체의 빈 User Multi 슬롯과 저장 ID를 확인하여 저장하고 결과를 기록한다. 파일 생성 완료와 실기 저장 완료를 구분한다.
+4. **Bank 일괄 전송(`Send All`)은 금지한다.** 오프라인 Bank의 빈 항목까지 전송하면 장치의 기존 User 슬롯이 지워질 수 있다. 이 경로는 한 건 전송 방식이 검증된 파일 형식에 한해 제공한다.
 
 ### 4.2 후속 단계
 
@@ -78,7 +96,7 @@
 
 공장 초기화, 펌웨어 업데이트, 기존 사용 중인 슬롯 덮어쓰기·삭제, 전체 Bank 복원, Global Transpose 및 전역 페달 설정 변경은 제공하지 않는다. 임의의 원시 SysEx 전송 도구도 노출하지 않는다.
 
-신시사이저 소프트웨어 음원 구현, 자동 원곡 음색 복제, 악보/PDF 자동 해석, 공연 중 컴퓨터를 필수로 사용하는 구성, 타 기종 지원은 초기 범위에 포함하지 않는다. 기술적 저장 확인과 실제 소리의 적합성 판단은 구분한다.
+신시사이저 소프트웨어 음원 구현, 자동 원곡 음색 복제, 악보/PDF 자동 해석, 공연 중 컴퓨터를 필수로 사용하는 구성, 타 기종 지원도 초기 범위에서 제외한다. 기술적 저장 확인과 실제 소리의 적합성 판단은 구분한다.
 
 ## 5. 기능 요구사항
 
@@ -101,12 +119,15 @@
 
 - **번호 공간:** `program_id`와 `multi_id`를 별도 필드로 다룬다. User 저장 대상은 SP6의 1025–2048 범위에서 선택하며, 현재 fixture의 전체 레코드 수 2304를 저장 가능 범위로 오해하지 않는다.
 - **음이름:** 내부 기준은 MIDI note 0–127, 표시는 `C4 = MIDI 60`이다. SP6 88건반의 물리 범위는 21–108이다. 범위와 Transpose를 독립적으로 다루고 실제 생성 음높이도 표시한다.
-- **Zone:** 1–4번을 명시한다. 활성 Zone에는 Program, MIDI Channel, Key/Velocity 범위, Transpose, Volume/Pan이 필요하다. 비활성 Zone은 확실히 비활성화한다.
+- **Zone:** 1–4번을 명시한다. 활성 Zone의 해석된 결과에는 Program, MIDI Channel, Key/Velocity 범위, Transpose, Volume/Pan이 필요하다. 입력 필드를 생략하면 아래 템플릿 보존 규칙을 적용한다. 비활성 Zone은 확실히 비활성화한다.
 - **분할과 겹침:** 분할 모드에서는 원치 않는 겹침을 오류로 처리한다. Layer용 의도적 겹침은 설정표에서 허용할 수 있어야 한다. 겹침을 일률적으로 금지하거나 자동으로 범위를 바꾸지 않는다.
-- **검증 범위:** Key Low ≤ High, Velocity 1–127, Volume/Pan 0–127, Channel 1–16을 검사한다. Transpose는 확인한 장치/codec 지원 범위를 적용하며, 미확인 지원 범위를 추정하지 않는다. 실물 범위를 벗어난 음은 오류 또는 명시적 경고로 보고한다.
-- **이름:** Multi 이름의 장치 제한 16자를 검증한다. 인코딩 불가 문자는 조용히 손실 변환하지 않는다.
-- **초기값:** Common Volume과 Volume 컨트롤러 Entry Position이 충돌하지 않게 한다. `0`, `Off`, `None`, 필드 미지정은 서로 다른 상태로 보존한다. ModWheel 초기값과 Filter1 초기값도 별개다.
+- **검증 범위:** Key 값은 MIDI 0–127, Velocity 값은 1–127, Volume/Pan은 0–127 또는 `None`, Channel은 1–16을 검사한다. Pan 64는 중앙이다. Transpose는 확인된 장치/codec 범위를 적용하고, 물리 건반 범위를 벗어난 음은 오류 또는 명시적 경고로 보고한다.
+- **역전 범위:** 읽기에서는 Key Low > High와 Velocity Low > High를 정상 데이터로 보존한다. 새 `split` 생성에서는 기본적으로 거부하되, Zone별 `allow_inverted_key_range: true` 또는 `allow_inverted_velocity_range: true`로 제외 구간(역전 범위)을 명시하면 해당 범위를 허용한다. Low/High를 자동 교환하지 않으며, 허용 후에도 장치 지원과 실제 발음 구간의 겹침 정책을 검사한다. 근거: [SP6 Musician’s Guide Rev. F](https://kurzweil.com/wp-content/uploads/2026/05/SP6-Musicians-Guide_Rev-F.pdf), Key/Velocity Page 5-3–5-4(PDF 61–62쪽).
+- **이름:** Multi 이름의 장치 제한 16자를 검증한다. 인코딩 불가 문자는 오류로 보고한다. 근거: 같은 매뉴얼 Multi Save Dialog 4-11(PDF 57쪽).
+- **초기값:** Common Volume과 Volume 컨트롤러 Entry Position의 의미·충돌을 함께 검사한다. JSON의 명시적 `"none"`은 이전 Multi/Program 모드에서 해당 MIDI 채널이 사용하던 Volume/Pan 값을 유지한다. 필드 생략은 템플릿 값 보존이며, `0`, `Off`, `"none"`, 필드 생략은 서로 다른 상태다. JSON `null`을 `"none"` 대신 사용하지 않는다. ModWheel과 Filter1 초기값도 별개다. 근거: 같은 매뉴얼 Mixer Page 5-2–5-3(PDF 60–61쪽).
+- **Arp:** `arp_button`은 `"yes"`/`"no"`로 표현한다. 패턴·Beats·Latch 등 Program Arp 설정, Zone의 버튼 제어 허용, 현재 ARP ON/OFF 상태를 각각 구분한다. 근거: 같은 매뉴얼 Buttons Page 5-5(PDF 63쪽).
 - **Program 의존성:** User Program은 ID뿐 아니라 수신 데이터/백업의 이름·해시와 출처를 추적한다. 참조 Program이 없거나 달라졌으면 보고하며, 기존 Program을 자동으로 교체하지 않는다.
+- **템플릿 출처:** `template.source_path`는 사용자 로컬 백업 또는 장치 수신 Artifact의 경로이고, 상대 경로는 서버에 설정된 작업 루트 기준으로 해석한다. `template.sha256`은 그 원본 파일 전체의 해시다. 객체 종류·ID와 함께 기록하고 codec 버전도 결과에 남긴다. 해시가 다르면 `SOURCE_CHANGED`로 중단한다.
 - **미지정 필드:** 검증된 템플릿의 기존 값을 보존한다. 기본값을 임의 생성하거나 요청하지 않은 페달·FX·Pitch Wheel 설정을 바꾸지 않는다. 보존을 보장할 수 없는 형식은 생성하지 않는다.
 
 ## 6. 필수 보존 및 저장 규칙
@@ -121,8 +142,9 @@
 6. **재시도 규칙:** 영구 저장 결과가 불명확하면 자동으로 다시 쓰지 않는다. 먼저 해당 슬롯을 다시 읽고 `저장됨 / 저장되지 않음 / 확인 불가`를 구분한다. 장치 쓰기를 일반 파일처럼 원자적 롤백할 수 있다고 가정하지 않는다.
 7. **중단 상태 존중:** 연결 해제, 사용자 중지 또는 취소 후 추가 전송을 멈춘다. 이미 전송한 명령이 취소로 되돌아갔다고 보고하지 않는다.
 8. **기록:** 변경 계획, 원본/결과 해시, 수신 범위, 실제 대상 ID, 단계별 결과를 로컬에 남긴다. 기존 객체의 사전/사후 비교가 불가능하면 비교 완료라고 보고하지 않는다.
+9. **출력 경로 제한:** `sp6_multi_build`는 설정된 작업 폴더(`artifacts/`) 내부에만 새 파일을 쓴다. 입력은 그 폴더 기준 상대 경로로 제한하고, `..`·절대 경로·심볼릭 링크/Windows junction을 해석한 실제 경로가 폴더 밖이면 `OUTPUT_PATH_DENIED`로 거부한다. 원본 및 기존 파일 보호는 같은 폴더 안에서도 적용한다.
 
-저장 권한은 사용자의 작업 지시와 현재 연결·지원 상태에 따라 판단한다. 이미 승인된 범위에 대해 확인 창을 반복하지 않는다. 쓰기 준비/실행 분리는 대상 데이터의 무결성을 위한 내부 절차이며, 매번 별도 사용자 승인을 요구하는 기능으로 만들지 않는다.
+저장 권한의 단위는 **사용자 저장 지시 1건 = `plan_id` 1개 = 대상 슬롯 1개**다. 계획에는 장치·객체 종류·슬롯·Artifact 해시를 결합한다. 동일 계획의 준비·실행 과정에서는 확인 창을 반복하지 않는다. 대상이나 Artifact가 달라지면 기존 승인을 승계하지 않고 새 지시와 계획으로 연결한다. 연결·지원 상태도 실행 직전에 확인한다. 쓰기 준비/실행 분리는 데이터 무결성을 위한 내부 절차다.
 
 ## 7. MCP 인터페이스 초안
 
@@ -134,28 +156,29 @@
 | `sp6_file_inspect` | `path`, 객체 필터, 페이지 | 파일 해시, 인벤토리, 수집 범위·빈 상태의 근거 | P1 / 파일 읽기 |
 | `sp6_multi_read` | 파일/객체 참조, `multi_id` | 해석된 Multi, 미해석 필드, codec 근거 | P2 / 파일 읽기 |
 | `sp6_multi_validate` | `spec`, 템플릿·참조 정보 | 오류/경고와 필드 경로, 생성 가능 여부 | P1–P2 / 검증 |
-| `sp6_multi_build` | `spec`, 원본·템플릿, 출력 위치 | Artifact ID, 생성 경로/해시, 변경 보고서 | P2 / 새 로컬 파일 |
+| `sp6_multi_build` | `spec`, 원본·템플릿, `artifacts/` 내부 상대 출력 경로 | Artifact ID, 생성 경로/해시, 변경 보고서 | P2 / 새 로컬 파일 |
 | `sp6_artifact_diff` | 원본, Artifact | 필드별 차이, 다른 객체 보존 여부 | P2 / 파일 읽기 |
 | `sp6_device_discover` | 선택적 포트 필터 | 포트·Identity·호환 정보 | P3 / 식별 요청 |
 | `sp6_device_receive` | 장치, 객체 종류/ID 또는 명시적 범위 | 수신 Artifact, 응답·수집 범위 | P3 / 요청·수신 |
-| `sp6_write_prepare` | 장치, Artifact, 대상 ID | 검증된 쓰기 계획 ID, 의존성·대상 상태 | P4 / 읽기 확인만 |
+| `sp6_write_prepare` | 장치, Artifact, 대상 ID, 선택적 후보 검색 범위·상한 | 저장 가능 여부, 검증된 계획 ID, 의존성·대상 상태, 확인된 빈 슬롯 후보 목록 | P4 / 읽기 확인만 |
 | `sp6_write_commit` | `plan_id`, `request_id` | 저장 작업 ID와 단계별 결과 | P4 / 한 건 영구 저장 |
 | `sp6_write_result` | 저장 작업 ID | 마지막 확정 상태·수신 비교 결과 | P4 / 상태 조회 |
 
 ### 7.1 도구 동작 규칙
 
-- 미구현 도구는 완료 결과를 흉내 내지 않는다. 제공하는 도구 목록과 capability 보고는 실제 구현과 일치해야 한다.
+- 도구 목록과 capability 보고를 실제 구현에 맞춘다. 미구현 요청에는 명확한 미지원 오류를 반환한다.
 - JSON에 알 수 없는 필드, 범위 밖 값, 모호한 객체 종류가 있으면 명확한 오류를 반환한다. MCP 도구 annotation은 실제 부작용에 맞게 지정하되 보호 수단을 대신하지 않는다.
 - 읽기 도구는 장치 영구 메모리·Global 설정을 변경하지 않는다. `device_receive`는 명시한 읽기 요청만 허용한다.
-- `write_prepare`는 Artifact 해시·codec 버전·의존 Program·대상 장치/ID를 묶는다. 계획 만료/데이터 변경/재연결 시 재확인한다. `commit`은 새 임의 payload를 받지 않는다.
+- `write_prepare`는 6장의 지시 단위에 Artifact 해시·codec 버전·의존 Program·대상 장치/ID를 묶는다. 계획 만료/데이터 변경/재연결 시 재확인한다. `commit`은 준비된 계획만 받는다.
+- 대상이 점유되었거나 미확인이면 실행 가능한 `plan_id`를 발급하지 않는다. 요청된 범위·상한 안에서 읽어 확인한 빈 슬롯만 후보로 반환하며, 미검색 범위는 `unknown`으로 표시한다. 후보의 출처·확인 시점을 포함하고, 후보 선택 후에는 해당 슬롯으로 새 계획을 준비한다.
 - 같은 `request_id`의 재호출은 기존 결과를 조회한다. 결과 불명확 상태의 저장을 중복 전송하지 않는다.
 - 정상 작업의 파라미터 반복은 서버 내부에서 처리한다. 모델이 필드 하나마다 도구를 호출하지 않게 한다.
 - 결과에는 `status`, `operation_id`, `phase`, `warnings`, `evidence`를 포함한다. 실패 시 `error.code`, `error.message`, `error.field`, `retryable`, `device_write_state`를 제공한다.
-- 대표 오류: `UNSUPPORTED_FORMAT`, `UNSUPPORTED_FIELD`, `INVALID_SPEC`, `SOURCE_CHANGED`, `DEPENDENCY_MISMATCH`, `DEVICE_DISCONNECTED`, `PORT_BUSY`, `SLOT_OCCUPIED`, `SLOT_STATE_UNKNOWN`, `PLAN_STALE`, `WRITE_STATE_UNKNOWN`, `READBACK_MISMATCH`.
+- 대표 오류: `UNSUPPORTED_FORMAT`, `UNSUPPORTED_FIELD`, `INVALID_SPEC`, `SOURCE_CHANGED`, `DEPENDENCY_MISMATCH`, `DEVICE_DISCONNECTED`, `PORT_BUSY`, `SLOT_OCCUPIED`, `SLOT_STATE_UNKNOWN`, `PLAN_STALE`, `WRITE_STATE_UNKNOWN`, `READBACK_MISMATCH`, `OUTPUT_PATH_DENIED`.
 
 ## 8. 입력 설정표 예시: Stand Up!
 
-다음은 **설계 중인 입력 형식 예시**다. 아직 실행 가능한 MCP API 또는 생성 완료 파일이 아니다. 음이름은 설명용이고 실제 값은 MIDI 번호다.
+다음은 **설계 중인 입력 형식 예시**다. 음이름은 설명용이고 실제 값은 MIDI 번호다. `source_path`는 사용자가 제공할 로컬 파일의 예시 경로이고 SHA-256은 형식 설명용 값이므로, 실제 입력 시 원본 경로와 해시로 바꾼다.
 
 ```json
 {
@@ -163,7 +186,12 @@
   "operation": "create_multi",
   "name": "STANDUP_LIVE",
   "preferred_user_multi_id": 1055,
-  "template": { "kind": "multi", "id": 1 },
+  "template": {
+    "source_path": "private/backups/sp6-template.ksp6",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "kind": "multi",
+    "id": 1
+  },
   "range_policy": "split",
   "zones": [
     {
@@ -173,13 +201,15 @@
       "midi_channel": 1,
       "key_low": 21,
       "key_high": 83,
+      "allow_inverted_key_range": false,
+      "allow_inverted_velocity_range": false,
       "transpose_semitones": 0,
       "velocity_low": 1,
       "velocity_high": 127,
       "volume": 90,
       "volume_entry": 90,
       "pan": 64,
-      "arp_enabled": false,
+      "arp_button": "no",
       "controllers": {
         "modwheel": { "enabled": false },
         "filter1": { "enabled": false }
@@ -192,13 +222,15 @@
       "midi_channel": 2,
       "key_low": 84,
       "key_high": 108,
+      "allow_inverted_key_range": false,
+      "allow_inverted_velocity_range": false,
       "transpose_semitones": -24,
       "velocity_low": 1,
       "velocity_high": 127,
       "volume": 105,
       "volume_entry": 105,
       "pan": 64,
-      "arp_enabled": true,
+      "arp_button": "yes",
       "controllers": {
         "modwheel": { "enabled": true, "scale_percent": 100, "entry": 0 },
         "filter1": { "enabled": true, "scale_percent": 100 }
@@ -210,13 +242,27 @@
 }
 ```
 
-이 예제의 전제는 다음과 같다.
+`None`과 필드 생략을 구분하는 **부분 설정 예시**는 다음과 같다. 완전한 Multi 생성 요청에는 위 예시의 나머지 필수 필드도 필요하다.
+
+```json
+{
+  "zone": 1,
+  "volume": "none",
+  "volume_entry": "none",
+  "pan": "none"
+}
+```
+
+이 부분 설정은 Volume/Pan의 이전 채널 값을 유지하고 Volume 컨트롤러의 수치 초기값 주입도 해제한다. 각 필드를 생략하면 해당 템플릿 값을 보존하므로 결과가 다를 수 있다. 분할 기본 정책에서 제외 구간을 만들 때는 위 Zone의 `allow_inverted_key_range` 또는 `allow_inverted_velocity_range`를 명시적으로 `true`로 바꾼다.
+
+Stand Up 예제의 전제는 다음과 같다.
 
 - 왼손 Pad는 A0–B5(21–83), 오른손 Lead는 C6–C8(84–108)이다. B5/C6 경계에 겹침이나 빈틈이 없다.
-- Lead의 -24 ST는 물리 건반 범위를 바꾸지 않으며, 실제 음높이를 대략 C4–C6로 만든다. 연주를 통한 최종 확인은 별도다.
+- Lead의 -24 ST는 물리 건반 범위를 바꾸지 않으며, 생성 MIDI 음높이는 C4–C6다(84−24=60, 108−24=84). Program의 실제 발음과 연주를 통한 최종 확인은 별도다.
 - Program 1200 `STANDUP_LD12`는 이미 저장된 의존 음색으로 재사용한다. Arp Upwards / 1/16 / Shift 0 / Duration 60% / Latch Keys는 해당 Program 기록을 참조한다.
+- Zone 1의 `arp_button: "no"`는 Arp를 끄고, Zone 2의 `"yes"`는 버튼 제어를 허용한다. Multi를 불러온 직후의 실제 ARP ON/OFF 상태는 별도로 확인한다.
 - FILTER1 초기값과 최종 BPM은 미확정이므로 생성기가 추측하지 않는다. 생략 필드는 템플릿 값을 보존하고, 실제 적용값과 미조정 상태를 보고한다.
-- 1055는 후보 번호이며 예약이 아니다. 과거 빈 슬롯 확인은 현재 빈 상태를 보장하지 않는다. 사용 중이면 덮어쓰지 않고 다른 빈 후보를 보고한다.
+- 1055는 후보 번호다. 저장 준비 시 빈 상태를 다시 확인하고, 사용 중이면 `sp6_write_prepare`가 요청된 범위에서 확인한 다른 빈 후보를 보고한다. 실제 저장은 선택한 한 슬롯에 결합된 새 계획으로 진행한다.
 
 ## 9. 구성안
 
@@ -240,7 +286,7 @@ flowchart LR
 - **stdio:** 초기 연결 방식은 stdio다. 표준 출력은 MCP 메시지 전용이며, 진단 로그는 표준 오류/로컬 파일로 보낸다. [MCP Transports 공식 명세](https://modelcontextprotocol.io/specification/latest/basic/transports)를 따른다.
 - **조작 경로:** GUI 좌표나 스크린샷에 의존하지 않는다. 검증용 SoundTower 파일 읽기는 보조 수단이며, 정상 경로를 GUI 자동 조작으로 구현하지 않는다.
 
-권장 코드 배치다. 현재 README와 .gitignore만 있으며, 구현·시험 디렉터리는 아직 생성하지 않았다.
+권장 코드 배치다. 구현·시험 디렉터리는 11장의 개발 단계에 따라 생성한다.
 
 ```text
 sp6-mcp/
@@ -288,13 +334,13 @@ sp6-mcp/
 | **P4 — 실기 한 건 저장** | 쓰기 계획, 저장, 영구 메모리 수신 비교 | 검증된 빈 User Multi에 한 건을 추가한다. 기존 슬롯 보호, 응답 불명확 시 중복 쓰기 방지를 확인하고 저장 결과를 기록한다. |
 | **P5 — 추가 기능** | Program/Arp 상세 편집, 간단한 화면, 지원 범위 확장 | 개별 요구사항과 검증 근거를 추가한 뒤 구현한다. MVP 완료 조건에는 포함하지 않는다. |
 
-**첫 착수점은 P1과 P2의 codec 조사다.** MCP 인터페이스만 만들고 파일 생성이 미구현인 상태를 제품 완성으로 표시하지 않는다. 파일 생성 MVP 완료도 전체 하드웨어 기능 완성과 구분한다.
+**첫 착수점은 P1과 P2의 codec 조사다.** MCP 인터페이스 제공은 P1, 파일 생성 MVP 완료는 P2 기준으로 판정하며, 전체 하드웨어 기능 완료와 구분한다.
 
 제품은 다음 상태를 구분해 보여준다.
 
 `설정 검증됨 → 파일 생성됨 → 파일 해석 확인됨 → 전송됨 → 영구 저장·수신 일치 → 연주 확인됨`
 
-각 상태는 해당 근거를 가진다. 중간에 멈출 수 있으며 이후 단계를 자동으로 추정하지 않는다. 기술적 저장 확인을 끝낸 뒤 반복적인 전체 데이터 수신을 정상 절차에 넣지 않는다.
+각 상태는 해당 근거를 확보했을 때만 전환하며, 중간에 멈출 수 있다. 정상 저장 절차는 해당 한 건의 수신 비교로 마무리하고, 반복적인 전체 데이터 수신은 별도 검증 작업으로 구분한다.
 
 ## 12. 인수 시험
 
@@ -302,38 +348,39 @@ sp6-mcp/
 |---|---|---|
 | AC-01 | 무변경 round-trip | 지원 fixture의 재생성 바이트/해시가 원본과 일치한다. |
 | AC-02 | 설정 필드의 독립 검증 | 한 필드만 다른 정답 fixture 또는 편집기가 만든 데이터를 통해 읽기/쓰기를 검증한다. 자체 encoder/decoder끼리의 일치만 근거로 삼지 않는다. |
-| AC-03 | Stand Up 생성 | 87/1200, 21–83/84–108, 0/-24 ST, 90/105, Pan64, Zone3/4 Off, 지정한 Arp/Controller가 재해석 결과와 편집기 표시에서 일치한다. |
-| AC-04 | Volume 초기값 충돌 | Common Volume 105와 Entry115가 남는 사례를 감지하고, 최종 생성값에 충돌이 없도록 한다. |
+| AC-03 | Stand Up 생성 | 87/1200, 21–83/84–108, 0/-24 ST, 90/105, Pan 64, Zone 3/4 Off, Zone 1/2의 Arp 버튼 허용 no/yes와 지정한 Controller가 재해석 결과·편집기 표시에서 일치한다. |
+| AC-04 | Volume/Pan 초기값 | Common Volume 105와 Entry 115의 충돌을 감지한다. Volume/Pan의 `"none"`은 이전 채널 값 유지, 필드 생략은 템플릿 보존으로 구분하며 Pan 64를 중앙으로 해석한다. |
 | AC-05 | 기존 설정 보존 | 생성 전후 모든 대상 외 Program/Multi와 변경 대상 외 영역의 바이트가 일치한다. 원본 파일도 변경되지 않는다. |
-| AC-06 | 빈 슬롯 판정 오류 | 사용 중인1055, 누락 레코드, 수신 실패, 오래된 스냅샷의 사례에서 쓰기를 거부한다. |
-| AC-07 | 범위와 의존성 | 음이름 옥타브 차이, 범위 역전, 의도하지 않은 겹침, 명시적인 Layer, Program1200 부재/내용 변경을 올바르게 처리한다. |
+| AC-06 | 빈 슬롯 판정 오류 | 사용 중인 1055, 누락 레코드, 수신 실패, 오래된 스냅샷의 사례에서 쓰기를 거부한다. 후보는 요청 범위에서 확인된 빈 슬롯만 반환하며, 후보 선택 후 실제 저장 대상을 재확인한다. |
+| AC-07 | 범위와 의존성 | 음이름 옥타브 차이, 기존 Key/Velocity 역전 범위 보존, 새 split의 역전 기본 거부와 명시적 제외 구간 허용, 의도하지 않은 겹침, 명시적인 Layer, Program 1200 부재/내용 변경을 올바르게 처리한다. |
 | AC-08 | MCP 인터페이스 | 대상 클라이언트에서 도구 검색·입력 검증·구조화된 결과·오류 처리가 장치 없이 동작한다. |
 | AC-09 | 실패와 재개 | 전송 중 연결 해제, 저장 후 ACK 유실, 같은 요청 재전송, 저장 직전 대상 변경을 모의 시험하고 기존 슬롯 오저장/중복 전송을 방지한다. |
 | AC-10 | 실기 저장 인수 | 재개 지시 후 SP6에서 대상 한 건의 영구 저장·수신 일치를 확인한다. 기존 객체 비교 근거를 보관하며 검증용 추가 수신과 정상 저장 절차를 구분한다. |
+| AC-11 | 출처·출력 경로·승인 범위 | 원본 경로/해시 불일치, artifacts 밖 출력(`..`·절대 경로·링크 경유), 기존 출력 덮어쓰기, 다른 슬롯/Artifact로의 승인 승계를 거부한다. 이름 자료 부재 시 번호만 표시한다. |
 
-초기 개발은 fixture와 모의 MIDI로 진행한다. 현재 연결되지 않은 실기가 필요한 항목은 미실시로 기록한다. 최종 음색·밸런스·ModWheel의 연속 변화·Filter1 청감은 사용자의 연주 확인으로 기록한다.
+초기 개발은 fixture와 모의 MIDI로 진행한다. 실기 시험은 사용자 재개 지시와 연결 후 수행하고 실시일·근거를 기록한다. 최종 음색·밸런스·ModWheel의 연속 변화·Filter1 청감은 사용자의 연주 확인으로 기록한다.
 
 ## 13. 미해결 사항과 판단 기준
 
 1. **내부 형식:** Multi Zone/Controller/Arp 데이터의 경계와 버전 차이. 근거를 확보하기 전에는 필드 쓰기를 활성화하지 않는다.
 2. **파일 전달:** 단일 Multi를 안전하게 불러오는 확장자·구조와 대상 ID 처리. 전체 데이터를 잘못 전송하지 않는 경로를 검증한다.
 3. **장치 프로토콜:** 객체 요청·전송 인코딩·체크섬·ACK·저장 명령. 공개 자료, 검증 데이터, 필요시 사용자 재개 후의 통신 기록으로 확정한다.
-4. **지원 OS:** 과거 기기 Identity는 OS3.84였다. 이를 모든 형식의 지원 보장으로 취급하지 않고 실제 검증한 버전을 기록한다. 호환성 문제를 자동 펌웨어 업데이트로 해결하지 않는다.
+4. **지원 OS:** 기록된 기기 Identity는 OS 3.84다. 지원은 실제 검증한 버전과 형식으로 한정하며, 자동 펌웨어 업데이트는 제외 범위를 따른다.
 5. **클라이언트:** 처음 사용할 MCP 클라이언트와 SDK의 공통 지원 버전을 P1에서 고정한다. 여러 AI가 같은 core/schema를 사용한다.
-6. **의존 음색:** Program1200 fingerprint를 실기 수신값과 연결하는 방법을 확정한다. 백업 존재만으로 현재 건반 음색의 일치를 보장하지 않는다.
+6. **의존 음색:** Program 1200 fingerprint를 실기 수신값과 연결하는 방법을 확정한다. 건반 음색의 일치는 해당 수신값으로 판정한다.
 
 조사는 독립적인 작은 필드부터 진행한다. 형식을 특정할 수 없으면 해당 범위를 미지원으로 명시하고, 대량의 화면 조작을 재개하는 것으로 대체하지 않는다.
 
 ## 14. 참고 자료
 
 - [Kurzweil SP6 공식 페이지·소프트웨어](https://kurzweil.com/sp6/)
-- [SP6 Musician’s Guide Rev. F](https://kurzweil.com/wp-content/uploads/2020/09/SP6-Musicians-Guide-Rev-F.pdf)
+- [SP6 Musician’s Guide Rev. F](https://kurzweil.com/wp-content/uploads/2026/05/SP6-Musicians-Guide_Rev-F.pdf)
 - [SoundTower SP6 — Program/Multi/Effect 송수신](https://www.soundtower.com/sp6/sp6_sa.html)
 - [MCP Tools 공식 명세](https://modelcontextprotocol.io/specification/latest/server/tools)
 - [MCP Transports 공식 명세](https://modelcontextprotocol.io/specification/latest/basic/transports)
 - [공식 MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 
-참고 자료는 개별 기능과 통신 경로의 근거이며, SP6용 완전한 쓰기 명세가 공개되어 있다는 의미는 아니다.
+참고 자료는 개별 기능과 통신 경로의 근거다. SP6용 쓰기 명세는 13장의 별도 검증 과제로 관리한다.
 
 ## 15. 공개 GitHub 저장소 조사 — 2026-11-06
 
