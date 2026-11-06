@@ -1,0 +1,45 @@
+# Private device data, captures, and generated artifacts
+backups/
+captures/
+artifacts/
+private/
+.private/
+.sp6_work/
+*.ksp6
+*.sp6
+*.syx
+*.pc3
+*.p3k
+*.for
+*.fse
+*.krz
+*.k25
+*.k26
+*.wav
+*.aif
+*.aiff
+*.pdf
+
+# Credentials and local settings
+.env
+.env.*
+!.env.example
+.secrets/
+
+# Python environments and build output
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
