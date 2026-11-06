@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sp6-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "Unofficial offline MCP tools for planning Kurzweil SP6 Multi setups"
 readme = "README.md"
 license = "MIT"

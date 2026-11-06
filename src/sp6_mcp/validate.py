@@ -231,6 +231,13 @@ def validate(spec: MultiSpec, template: TemplateInfo | None) -> ValidationReport
                 )
             else:
                 dep.update(present_in_file=True, name=rec.name, sha256=sha256(rec.payload))
+                if pid >= 1025:
+                    report.warn(
+                        DEPENDENCY_MISMATCH,
+                        f"User Program {pid} '{rec.name}' is taken from the file; confirm the keyboard holds the same "
+                        "Program (compare its sha256 after receiving it) before relying on this Multi",
+                        f"zones[{z['zone']}].program_id",
+                    )
             report.dependencies.append(dep)
 
     report.effective_zones = [zones[n] for n in range(1, 5)]

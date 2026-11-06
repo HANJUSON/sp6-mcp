@@ -1,0 +1,108 @@
+import hashlib
+import json
+
+import pytest
+
+from sp6_mcp import multi_codec as mc
+from sp6_mcp.build import build, diff_files
+from sp6_mcp.container import Container
+from sp6_mcp.errors import Sp6Error
+from sp6_mcp.spec import parse_spec
+from sp6_mcp.workspace import Workspace
+
+from synth import standard_bank
+
+
+@pytest.fixture
+def ws(tmp_path):
+    root = tmp_path / "root"
+    (root / "private").mkdir(parents=True)
+    (root / "private" / "bank.ksp6").write_bytes(standard_bank())
+    return Workspace(root, root / "artifacts")
+
+
+def sheet(ws, **over):
+    data = (ws.work_root / "private" / "bank.ksp6").read_bytes()
+    d = {
+        "schema_version": "1", "operation": "create_multi", "name": "STANDUP_LIVE",
+        "preferred_user_multi_id": 1026,
+        "template": {"source_path": "private/bank.ksp6", "sha256": hashlib.sha256(data).hexdigest(), "kind": "multi", "id": 1},
+        "zones": [
+            {"zone": 1, "enabled": True, "program_id": 87, "midi_channel": 1, "key_low": 21, "key_high": 83},
+            {"zone": 2, "enabled": True, "program_id": 1200, "midi_channel": 2, "key_low": 84, "key_high": 108, "transpose_semitones": -24},
+            {"zone": 3, "enabled": False}, {"zone": 4, "enabled": False}],
+    }
+    d.update(over)
+    return parse_spec(d)
+
+
+def test_build_fmlt(ws):
+    before = (ws.work_root / "private" / "bank.ksp6").read_bytes()
+    r = build(sheet(ws), ws, "standup.fmlt")
+    assert (ws.work_root / "private" / "bank.ksp6").read_bytes() == before  # source untouched
+    c = Container(r.output_path.read_bytes())
+    assert [(x.kind, x.object_id) for x in c.records][0] == ("multi", 1026)
+    assert r.report["included_program_ids"] == [87, 1200, 1]  # every zone, as in editor exports
+    v = mc.decode(c.get("multi", 1026).payload)
+    assert v.name == "STANDUP_LIVE"
+    assert [z.values["enabled"] for z in v.zones] == [True, True, False, False]
+    assert v.zones[1].values["transpose_semitones"] == -24
+    m = json.loads(r.manifest_path.read_text(encoding="utf-8"))
+    assert m["result"]["phase"] == "file_built" and m["result"]["device_write_state"] == "not_sent"
+    assert r.report["changes"]["uninterpreted_bytes_changed"] == 0
+
+
+def test_build_ksp6_preserves_everything_else(ws):
+    r = build(sheet(ws), ws, "out/standup.ksp6", "ksp6")
+    d = diff_files(ws.work_root / "private" / "bank.ksp6", r.output_path)
+    assert d["records_changed"] == ["multi:1026"] and not d["records_added"] and d["records_removed_count"] == 0
+    assert d["multi_field_diffs"][0]["note"] == "empty payload on one side"
+    assert r.report["preserved"]["non_record_bytes_identical"]
+
+
+def test_build_is_deterministic(ws):
+    a = build(sheet(ws), ws, "a.fmlt").output_path.read_bytes()
+    b = build(sheet(ws), ws, "b.fmlt").output_path.read_bytes()
+    assert a == b
+
+
+def test_diff_with_source_multi(ws):
+    r = build(sheet(ws), ws, "x.fmlt")
+    d = diff_files(ws.work_root / "private" / "bank.ksp6", r.output_path, source_multi_id=1)
+    z = {e["zone"]: e["fields"] for e in d["multi_field_diffs"][0]["zones"]}
+    assert z[2]["transpose_semitones"] == {"from": 0, "to": -24}
+
+
+@pytest.mark.parametrize("path", ["../escape.fmlt", "C:/abs.fmlt", "/abs.fmlt", ""])
+def test_output_path_denied(ws, path):
+    with pytest.raises(Sp6Error) as e:
+        build(sheet(ws), ws, path)
+    assert e.value.code == "OUTPUT_PATH_DENIED"
+
+
+def test_existing_output_denied(ws):
+    build(sheet(ws), ws, "same.fmlt")
+    with pytest.raises(Sp6Error) as e:
+        build(sheet(ws), ws, "same.fmlt")
+    assert e.value.code == "OUTPUT_PATH_DENIED"
+
+
+def test_occupied_target_refused(ws):
+    with pytest.raises(Sp6Error) as e:
+        build(sheet(ws, preferred_user_multi_id=1025), ws, "o.fmlt")
+    assert e.value.code == "SLOT_OCCUPIED"
+
+
+def test_unsupported_field_refused(ws):
+    s = sheet(ws)
+    d = s.model_dump(mode="json", exclude_unset=True)
+    d["zones"][1]["volume"] = 105
+    with pytest.raises(Sp6Error) as e:
+        build(parse_spec(d), ws, "u.fmlt")
+    assert e.value.code == "UNSUPPORTED_FIELD"
+    assert not (ws.artifacts_dir / "u.fmlt").exists()
+
+
+def test_ksp6_needs_existing_empty_record(ws):
+    with pytest.raises(Sp6Error):
+        build(sheet(ws, preferred_user_multi_id=1500), ws, "k.ksp6", "ksp6")
