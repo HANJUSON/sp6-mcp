@@ -53,3 +53,6 @@ Thumbs.db
 # Only synthetic or explicitly publishable fixtures; never put personal backups here.
 !tests/fixtures/**/*.ksp6
 !tests/fixtures/**/*.syx
+
+# Local agent tooling state
+.omc/
