@@ -19,6 +19,11 @@ private/
 *.aif
 *.aiff
 *.pdf
+*.mid
+*.midi
+# Diagnostic logs may contain raw device data (README 9: stderr/local log files).
+logs/
+*.log
 
 # Credentials and local settings
 .env
@@ -35,8 +40,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
-build/
-dist/
+# Root-anchored so source packages such as src/sp6_mcp/service/build/ stay tracked.
+/build/
+/dist/
 
 # Editor and operating-system files
 .idea/
