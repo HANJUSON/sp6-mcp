@@ -1,6 +1,6 @@
 import pytest
 
-from sp6_mcp.container import Container, encode_record, single_object_export
+from sp6_mcp.container import Container, encode_record
 from sp6_mcp.errors import Sp6Error
 
 from synth import multi_payload, program_payload, standard_bank
@@ -53,14 +53,6 @@ def test_duplicate_records_rejected():
 def test_no_records_rejected():
     with pytest.raises(Sp6Error):
         Container(b"just some bytes")
-
-
-def test_single_object_export_layout():
-    c = Container(standard_bank())
-    out = single_object_export(c.get("multi", 1025), [c.get("program", 1200)], 1055)
-    c2 = Container(out)
-    assert [(r.kind, r.object_id) for r in c2.records] == [("multi", 1055), ("program", 1200)]
-    assert c2.get("multi", 1055).payload == c.get("multi", 1025).payload
 
 
 def test_bad_object_id():

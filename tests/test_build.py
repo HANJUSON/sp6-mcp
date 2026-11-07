@@ -43,6 +43,8 @@ def test_build_fmlt(ws):
     c = Container(r.output_path.read_bytes())
     assert [(x.kind, x.object_id) for x in c.records][0] == ("multi", 1026)
     assert r.report["included_program_ids"] == [87, 1]  # user Program 1200 deliberately left out
+    deps = r.report["fmlt_dependencies"]
+    assert deps["fx_ids"] == {"87": [19], "1": [5001, 5002, 5003]} and deps["alg_ids"]["87"] == [6, 120]
     v = mc.decode(c.get("multi", 1026).payload)
     assert v.name == "STANDUP_LIVE"
     assert [z.values["enabled"] for z in v.zones] == [True, True, False, False]
@@ -115,9 +117,19 @@ def test_extension_must_match_format(ws):
     assert e.value.field == "output_path"
 
 
-def test_fmlt_is_flagged_partial(ws):
+def test_fmlt_flags_left_out_user_programs(ws):
     r = build(sheet(ws), ws, "p.fmlt", "fmlt")
-    assert any(w["code"] == "PARTIAL_EXPORT" for w in r.report["warnings"])
+    assert any(w["code"] == "PARTIAL_EXPORT" and "1200" in w["message"] for w in r.report["warnings"])
+    assert r.report["fmlt_dependencies"]["complete"] is False
+
+
+def test_fmlt_complete_with_factory_programs_only(ws):
+    d = sheet(ws).model_dump(mode="json", exclude_unset=True)
+    d["zones"][1]["program_id"] = 1
+    d["zones"][1]["midi_channel"] = 2
+    r = build(sheet(ws, zones=d["zones"]), ws, "f.fmlt", "fmlt")
+    assert r.report["fmlt_dependencies"]["complete"] is True
+    assert not any(w["code"] == "PARTIAL_EXPORT" for w in r.report["warnings"])
 
 
 @pytest.mark.parametrize("path", ["prev.ksp6:evil.ksp6", "x.ksp6.", "dir. /x.ksp6", "sub/aux.ksp6", "CON.ksp6", "a?.ksp6"])
@@ -139,3 +151,26 @@ def test_write_new_file_never_deletes_foreign_files(tmp_path):
         write_new_file(existing, b"overwrite?")
     assert existing.read_bytes() == b"KEEP"
     assert not list(tmp_path.glob(".sp6tmp-*"))
+
+
+def test_fmlt_verifies_fx_alg_bytes_and_reports_missing(ws):
+    r = build(sheet(ws), ws, "v.fmlt", "fmlt")
+    assert r.report["preserved"]["fx_alg_records_copied_verbatim"] is True
+    d = sheet(ws).model_dump(mode="json", exclude_unset=True)
+    d["zones"][2] = {"zone": 3, "enabled": False, "program_id": 300}
+    r = build(sheet(ws, zones=d["zones"]), ws, "m.fmlt", "fmlt")
+    assert 300 in r.report["fmlt_dependencies"]["missing_program_ids"]
+    assert any(w["code"] == "PARTIAL_EXPORT" and "300" in w["message"] for w in r.report["warnings"])
+
+
+def test_fmlt_unknown_program_layout_aborts(ws):
+    from synth import bank, multi_payload, program_payload
+    data = bank({1: multi_payload("T", [{"program": 9}, {}, {}, {}]), 1026: b""},
+                {1: program_payload(), 9: b"Odd" + bytes(17) + b"PC3" + bytes(30)})
+    (ws.work_root / "private" / "bank.ksp6").write_bytes(data)
+    d = sheet(ws).model_dump(mode="json", exclude_unset=True)
+    d["zones"] = [{"zone": 1, "enabled": True}, {"zone": 2, "enabled": False}, {"zone": 3, "enabled": False}, {"zone": 4, "enabled": False}]
+    with pytest.raises(Sp6Error) as e:
+        build(sheet(ws, zones=d["zones"]), ws, "x.fmlt", "fmlt")
+    assert e.value.code == "UNSUPPORTED_FORMAT"
+    assert not (ws.artifacts_dir / "x.fmlt").exists()

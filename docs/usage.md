@@ -1,4 +1,4 @@
-# 사용법 (v0.7.0)
+# 사용법 (v0.8.0)
 
 > 비공식 도구다. 이 서버는 MIDI 포트를 열지 않고 건반에 아무것도 보내지 않는다. 생성 파일을 건반에 저장하는 일은 사용자가 SP6 Sound Editor로 직접 한다.
 
@@ -61,7 +61,7 @@ Claude Desktop (`claude_desktop_config.json`):
 | `sp6_object_find` | 이름으로 Program/Multi 번호 찾기 (예: "Prophet Pad" → 87) | 없음 |
 | `sp6_multi_read` | Multi의 Zone별 켜짐·Channel·Program(이름)·범위·Transpose·Volume·Pan | 없음 |
 | `sp6_multi_validate` | 설정표 검증: 오류·경고와 필드 경로, 실제 소리 나는 음역 | 없음 |
-| `sp6_multi_build` | artifacts 폴더에 새 `.ksp6`(기본: 템플릿 Bank 사본 + 빈 레코드 하나에 새 Multi) 또는 부분 형식 `.fmlt`와 `.manifest.json` 생성. 확장자는 형식과 같아야 한다 | 새 로컬 파일 |
+| `sp6_multi_build` | artifacts 폴더에 새 `.ksp6`(기본: 템플릿 Bank 사본 + 빈 레코드 하나에 새 Multi) 또는 편집기 배치를 따른 `.fmlt`(Program마다 FX·Alg 레코드 포함, User Program 제외)와 `.manifest.json` 생성. 확장자는 형식과 같아야 한다 | 새 로컬 파일 |
 | `sp6_artifact_diff` | 템플릿과 생성 파일의 레코드·필드 차이 | 없음 |
 
 성공 결과는 `status`, `operation_id`, `phase`, `warnings`, `evidence`, `result`를 가진다. 실패는 MCP 도구 오류이며 본문은 `{"status":"error","error":{code,message,field,retryable,device_write_state}}` JSON이다.

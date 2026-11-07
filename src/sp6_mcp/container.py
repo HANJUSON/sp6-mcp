@@ -214,14 +214,3 @@ class Container:
             )
         return rows
 
-
-def single_object_export(multi: Record, programs: Iterable[Record], multi_id: int) -> bytes:
-    """Build a single-Multi file in the observed ``.fmlt`` layout.
-
-    Layout observed in editor exports: the Multi record first, followed by the
-    Program records it references. Only records are emitted; the caller decides
-    which Programs to include.
-    """
-    parts = [encode_record("multi", multi_id, multi.payload)]
-    parts.extend(encode_record("program", p.object_id, p.payload) for p in programs)
-    return b"".join(parts)

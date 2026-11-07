@@ -64,7 +64,7 @@ def capabilities() -> dict:
         "unofficial": True,
         "file_formats": {
             "read": [".ksp6 (editor bank)", ".fmlt (single Multi export)"],
-            "write": ["ksp6 (default: template bank with one empty record filled)", "fmlt (partial: Multi + Program records, without the FX/algorithm records editor exports carry)"],
+            "write": ["ksp6 (default: template bank with one empty record filled)", "fmlt (editor layout: Multi, then each zone's Program with its FX and algorithm records; user Programs left out)"],
         },
         "multi_fields": {
             name: {"writable": f.writable, "evidence": f.evidence} for name, f in mc.FIELDS.items()
@@ -196,7 +196,7 @@ def create_server(workspace: Workspace | None = None) -> MCPServer:
 
         output_path is relative to the artifacts directory, must not exist and must end with
         .ksp6 or .fmlt matching output_format. 'ksp6' (default) is a complete copy of the template
-        bank with the new Multi in one empty record; 'fmlt' lacks the editor's FX/algorithm records.
+        bank with the new Multi in one empty record; 'fmlt' follows the editor layout (Multi, then each zone's Program with its FX/algorithm records); user Programs are left out and flagged PARTIAL_EXPORT.
         """
         try:
             result = build(parse_spec(spec), ws, output_path, output_format)

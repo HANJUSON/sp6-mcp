@@ -14,7 +14,8 @@ from typing import Any, Literal
 
 from . import __version__
 from . import multi_codec as mc
-from .container import Container, Record, sha256, single_object_export
+from .closure import FmltExport, aux_records, export_fmlt
+from .container import Container, encode_record, sha256
 from .errors import INVALID_SPEC, SLOT_OCCUPIED, UNSUPPORTED_FORMAT, Sp6Error
 from .spec import MultiSpec
 from .validate import ValidationReport, load_template, validate
@@ -41,20 +42,23 @@ def _zone_changes(spec: MultiSpec) -> dict[int, dict[str, Any]]:
     return changes
 
 
-def _program_records(container: Container, payload: bytes) -> list[Record]:
-    """Programs referenced by the new Multi that exist in the template file."""
-    out: list[Record] = []
-    seen: set[int] = set()
-    for zone in mc.decode(payload).zones:
-        pid = zone.values["program_id"]
-        if pid in seen:
-            continue
-        seen.add(pid)
-        rec = container.get("program", pid)
-        # User Programs are left out so an editor import can never carry a
-        # stale copy over a Program saved on the keyboard.
-        if rec is not None and not rec.empty and pid < 1025:
-            out.append(rec)
+def _fmlt_warnings(export: FmltExport) -> list[dict]:
+    out = []
+    if export.excluded_program_ids:
+        out.append({
+            "severity": "warning", "code": "PARTIAL_EXPORT", "field": "output_format",
+            "message": f"User Programs {export.excluded_program_ids} are left out of the .fmlt so an import cannot "
+            "carry a stale copy over Programs saved on the keyboard. The editor resolves them from the instrument; "
+            "the file is not a complete editor-style export.",
+        })
+    if export.missing_program_ids:
+        out.append({
+            "severity": "warning", "code": "PARTIAL_EXPORT", "field": "output_format",
+            "message": f"Programs {export.missing_program_ids} are absent or empty in the template file, so the .fmlt cannot "
+            "carry them or their FX/algorithm records.",
+        })
+    for note in export.notes:
+        out.append({"severity": "warning", "code": "FMLT_LAYOUT_UNVERIFIED", "field": "output_format", "message": note})
     return out
 
 
@@ -93,11 +97,14 @@ def build(
             raise Sp6Error(SLOT_OCCUPIED, f"Record {target_id} is not empty in the template file", "preferred_user_multi_id")
         data = container.encode({("multi", target_id): new_payload})
         included_programs: list[int] = []
+        fmlt_warnings: list[dict] = []
+        export = None
     elif output_format == "fmlt":
-        programs = _program_records(container, new_payload)
-        multi_record = Record("multi", target_id, new_payload, 0, 0)
-        data = single_object_export(multi_record, programs, target_id)
-        included_programs = [p.object_id for p in programs]
+        zone_programs = [z.values["program_id"] for z in mc.decode(new_payload).zones]
+        export = export_fmlt(container, zone_programs, encode_record("multi", target_id, new_payload))
+        data = export.data
+        included_programs = export.program_ids
+        fmlt_warnings = _fmlt_warnings(export)
     else:  # pragma: no cover - checked above
         raise AssertionError(output_format)
 
@@ -115,22 +122,20 @@ def build(
         "output": {"path": str(target), "format": output_format, "bytes": len(data), "sha256": out_sha},
         "target_multi_id": target_id,
         "included_program_ids": included_programs,
+        "fmlt_dependencies": None if export is None else {
+            "complete": export.complete,
+            "excluded_user_program_ids": export.excluded_program_ids,
+            "missing_program_ids": export.missing_program_ids,
+            "fx_ids": {str(k): v for k, v in export.fx_ids.items()},
+            "alg_ids": {str(k): v for k, v in export.alg_ids.items()},
+        },
         "template": report.template,
         "codec_version": mc.CODEC_VERSION,
         "tool_version": __version__,
         "changes": verification["field_changes"],
         "preserved": verification["preserved"],
         "dependencies": report.dependencies,
-        "warnings": [i.to_dict() for i in report.issues if i.severity == "warning"] + (
-            [{
-                "severity": "warning",
-                "code": "PARTIAL_EXPORT",
-                "field": "output_format",
-                "message": "Editor .fmlt exports also carry each Program's FX and algorithm records; this file "
-                "contains only the Multi and Program records. Prefer output_format 'ksp6' until the editor "
-                "has been shown to accept this file.",
-            }] if output_format == "fmlt" else []
-        ),
+        "warnings": [i.to_dict() for i in report.issues if i.severity == "warning"] + fmlt_warnings,
         "effective_zones": report.effective_zones,
         "not_adjusted": "Velocity, volume, pan, controllers (ModWheel/FILTER1), Arp button, pedals, wheels "
         "and FX keep the template's values; this codec cannot write them yet.",
@@ -188,7 +193,11 @@ def verify_artifact(
                 src = template.get("program", rec.object_id)
                 if src is None or src.payload != rec.payload:
                     raise Sp6Error(UNSUPPORTED_FORMAT, f"Program {rec.object_id} differs from the template file")
-        preserved.update(program_records_copied_verbatim=True)
+        source_aux = aux_records(template.data)
+        for key, raw in aux_records(data).items():
+            if source_aux.get(key) != raw:
+                raise Sp6Error(UNSUPPORTED_FORMAT, f"{key[0]} record {key[1]} differs from the template file")
+        preserved.update(program_records_copied_verbatim=True, fx_alg_records_copied_verbatim=True)
     return {"field_changes": field_changes, "preserved": preserved}
 
 

@@ -14,8 +14,22 @@
 - `NNNN`은 4자리 객체 ID다. 빈 슬롯은 payload 길이 0으로 기록된다.
 - 레코드 밖의 바이트(Bank 머리, FX/Alg 블록 등)는 해석하지 않고 그대로 보존한다.
 - 편집기 `.fmlt`(관찰 1개)는 Multi 레코드 1개 뒤에 Zone 순서대로 참조 Program 레코드가 이어지고, **각 Program 뒤에 그 Program의 FX 레코드(`FX***Data>NNNN`)와 알고리즘 레코드(`Alg**Data>NNNN`, Layer마다 반복)**가 붙는다. Multi·Program 레코드 부분은 같은 시점 Bank의 레코드와 바이트 단위로 같았고, FX/Alg 레코드도 모두 Bank 안에 같은 바이트열로 존재했다.
-- Program의 FX 참조는 payload 앞부분의 `03 03 51/52/53 xx <FX ID u16 BE>` 슬롯으로 관찰됐다(0이면 비어 있음). Alg 레코드와 Layer의 대응은 아직 확정하지 못했다.
-- 따라서 현재 생성기의 `.fmlt`는 FX/Alg 레코드가 빠진 **부분 형식**이며, User Program(1025 이상)은 건반에 저장된 Program 위로 오래된 사본이 들어갈 가능성을 막기 위해 넣지 않는다. 기본 출력은 템플릿 Bank 전체를 보존하고 빈 레코드 하나만 채우는 `.ksp6`다.
+- Program payload(이름 20바이트부터 시작) 기준 오프셋:
+  - FX 슬롯: 105, 117, 129에 `03 03 <51|52|53> <flags> <FX ID u16 BE>`. ID 0은 빈 슬롯이다.
+  - Layer: `521 + 318*k` 위치마다 `03 03 51` 표지가 있고, 그 Layer의 알고리즘 ID는 표지 112바이트 앞 1바이트다(바로 앞 바이트는 플래그 값으로, 513=`02 01`처럼 보인다).
+- `.fmlt` 조립 규칙(`src/sp6_mcp/closure.py`):
+  - Multi 레코드
+  - Zone 1→4 순서로, 켜짐/꺼짐과 관계없이 각 Zone의 Program 레코드
+  - 그 뒤에 0이 아닌 FX 슬롯 순서대로 FX 레코드, 이어서 Layer 순서대로 Alg 레코드(중복 제거 없음)
+  - FX/Alg 레코드는 Bank의 바이트열을 그대로 복사한다.
+- 검증(2026-11-07): `SP6_user_multis_after_20261030.ksp6`의 Multi 1050으로 이 규칙을 적용하면 `만년설_1050.fmlt` 34,245바이트가 **바이트 단위로 같게** 재현된다(`tests/test_closure.py`, `SP6_MCP_PRIVATE_DIR` 지정 시 실행). Program 1은 Layer 20개, Alg 레코드 20개다. 이전 문서의 "19개"는 잘못 센 값이었다.
+- 개인 백업 5개 Bank의 비어 있지 않은 Program 1,643개가 모두 이 Layer 격자를 따르고, 참조한 FX/Alg ID가 모두 Bank 안에 있었다.
+- 아직 관찰하지 못한 경우는 추정하지 않고 경고(`FMLT_LAYOUT_UNVERIFIED`)를 붙인다.
+  - FX 슬롯 순서가 51/52/53이 아닌 Program(백업에서 1개, 예: 51/53/52)
+  - 같은 FX ID가 두 슬롯에 있는 Program
+  - 여러 Zone이 같은 Program을 쓰는 Multi(현재는 한 번만 쓴다)
+- 격자를 벗어난 Program이나 Bank에 없는 FX/Alg 참조는 오류로 거부한다.
+- User Program(1025 이상)은 건반에 저장된 Program 위로 오래된 사본이 들어갈 가능성을 막기 위해 `.fmlt`에 넣지 않는다. 이 경우 결과는 `PARTIAL_EXPORT` 경고가 붙은 불완전 파일이다. 기본 출력은 여전히 템플릿 Bank 전체를 보존하고 빈 레코드 하나만 채우는 `.ksp6`다.
 - Multi payload 안에는 자기 슬롯 ID가 없다. 서로 다른 슬롯의 payload가 바이트 단위로 같은 사례가 있어, 슬롯 ID는 레코드 머리에서만 정해진다.
 
 로컬 검증(2026-11-06): 편집기·실기 수신으로 만든 `.ksp6` 6개와 `.fmlt` 1개가 모두 바이트 단위로 재생성됐다.
